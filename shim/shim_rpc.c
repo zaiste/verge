@@ -410,8 +410,10 @@ static cJSON* rpc_callvote(const cJSON* args, const char** err) {
         return NULL;
     }
     char buf[64];
-    strncpy(level->voteString, vote, sizeof(level->voteString));
-    strncpy(level->voteDisplayString, vote_disp, sizeof(level->voteDisplayString));
+    strncpy(level->voteString, vote, sizeof(level->voteString) - 1);
+    level->voteString[sizeof(level->voteString) - 1] = 0;
+    strncpy(level->voteDisplayString, vote_disp, sizeof(level->voteDisplayString) - 1);
+    level->voteDisplayString[sizeof(level->voteDisplayString) - 1] = 0;
     level->voteTime = (level->time - 30000) + vote_time * 1000;
     level->voteYes = 0;
     level->voteNo = 0;

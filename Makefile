@@ -11,7 +11,10 @@ endif
 
 BINDIR = bin
 CC ?= gcc
-CFLAGS += -shared -std=gnu11 -Wall -pthread
+CFLAGS += -shared -std=gnu11 -Wall -pthread -O2
+# The pattern scanner reads unaligned ints by design (fine on x86); zig cc
+# would otherwise trap them with its default UBSan.
+CFLAGS += -fno-sanitize=undefined
 LDFLAGS += -ldl -lm -pthread
 VERSION := MINQLX_VERSION=\"$(shell git describe --long --tags --dirty --always)\"
 
