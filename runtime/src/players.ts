@@ -46,8 +46,9 @@ export class Player {
     return CONNECTION_STATES[this.info.connectionState] ?? "free";
   }
   get isBot(): boolean {
-    // Bots have steam_id 0.
-    return this.info.steamId === "0";
+    // Bots historically have steam_id 0, but some QLDS builds assign them
+    // pseudo-ids; the `skill` userinfo key is the reliable marker.
+    return this.info.steamId === "0" || this.cvars.has("skill");
   }
   /** Parsed userinfo variables (name, rate, color, ...). */
   get cvars(): Map<string, string> {
