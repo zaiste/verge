@@ -25,5 +25,7 @@ jobs:
         run: cd runtime && bun install
       - name: Typecheck
         run: cd runtime && bun run typecheck
+      - name: Test
+        run: bun test
       - name: Bundle
         run: cd runtime && bun run bundle
