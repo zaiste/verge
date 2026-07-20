@@ -35,6 +35,10 @@ export class SocketEngine implements Engine {
   private handlers = new Map<RawEventName, RawHandler>();
   private buffer = "";
   private decoder = new TextDecoder(); // lossy on invalid engine bytes, by design
+  private encoder = new TextEncoder();
+  /** Bytes not yet accepted by the kernel; flushed on drain. Writing without
+   * honoring backpressure would corrupt the NDJSON framing under load. */
+  private outbox: Uint8Array | null = null;
 
   constructor(private socketPath: string) {}
 
@@ -63,6 +67,7 @@ export class SocketEngine implements Engine {
           log.info(`connected to engine at ${this.socketPath}`);
         },
         data: (_s, chunk) => this.onData(chunk),
+        drain: () => this.flush(),
         close: () => {
           // The shim owns our lifecycle: if the socket goes, so do we.
           log.info("engine socket closed, exiting.");
@@ -77,7 +82,22 @@ export class SocketEngine implements Engine {
   }
 
   private send(msg: SidecarMsg) {
-    this.sock?.write(JSON.stringify(msg) + "\n");
+    const bytes = this.encoder.encode(JSON.stringify(msg) + "\n");
+    if (this.outbox) {
+      const merged = new Uint8Array(this.outbox.length + bytes.length);
+      merged.set(this.outbox);
+      merged.set(bytes, this.outbox.length);
+      this.outbox = merged;
+    } else {
+      this.outbox = bytes;
+    }
+    this.flush();
+  }
+
+  private flush() {
+    if (!this.sock || !this.outbox) return;
+    const written = this.sock.write(this.outbox);
+    this.outbox = written >= this.outbox.length ? null : this.outbox.slice(written);
   }
 
   private onData(chunk: Uint8Array) {
