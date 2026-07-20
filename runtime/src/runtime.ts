@@ -16,6 +16,8 @@ import { createContext, type Plugin, type PluginRegistration, type RuntimeServic
 import { RAW_EVENTS, type RawEventName } from "./protocol";
 import { Command } from "./commands";
 import { EventResult } from "./constants";
+import { StatsListener } from "./stats";
+import { registerFeatures } from "./features";
 import { log } from "./util";
 
 /** Events the runtime subscribes to (frame and console_print stay off). */
@@ -34,6 +36,7 @@ export class Runtime {
   readonly pipeline: Pipeline;
   private plugins = new Map<string, PluginRegistration>();
   private services: RuntimeServices;
+  private stats: StatsListener | null = null;
 
   constructor(
     readonly engine: Engine,
@@ -67,6 +70,7 @@ export class Runtime {
   async start(): Promise<void> {
     this.pipeline.register();
     this.registerBuiltinCommands();
+    registerFeatures(this.config, this.engine, this.events, this.game, this.store);
     for (const name of this.config.server.plugins) {
       try {
         await this.loadPlugin(name);
@@ -77,6 +81,17 @@ export class Runtime {
     await this.engine.start(SUBSCRIPTIONS);
     // Expired-key cleanup once an hour.
     setInterval(() => this.db.sweep(), 3600_000).unref?.();
+
+    // Start the ZMQ stats listener once the game (and its cvars) are up.
+    if (this.config.stats.enabled) {
+      let started = false;
+      this.events.on("new_game", "core", () => {
+        if (started) return;
+        started = true;
+        this.stats = new StatsListener(this.engine, this.events, this.store, this.config.stats.password);
+        this.stats.start().catch((e) => log.error("stats listener failed to start:", e));
+      });
+    }
     log.info(`runtime ready: ${this.plugins.size} plugin(s) loaded.`);
   }
 
