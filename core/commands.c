@@ -9,9 +9,7 @@
 #include "quake_common.h"
 #include "common.h"
 
-#ifndef NOPY
 #include "../shim/dispatch.h"
-#endif
 
 void __cdecl SendServerCommand(void) {
     SV_SendServerCommand(NULL, "%s\n", Cmd_Args());
@@ -81,5 +79,5 @@ void __cdecl Slay(void) {
         Com_Printf("The player is currently not active.\n");
 }
 
-// The former PyRcon/PyCommand/RestartPython console commands live in
-// shim/shim_dispatch.c as ShimRcon/ShimCommand/ShimRestart.
+// The qlx/qlxrestart console commands live in shim/shim_dispatch.c as
+// ShimRcon/ShimCommand/ShimRestart.

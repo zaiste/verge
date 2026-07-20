@@ -1550,7 +1550,6 @@ extern G_FreeEntity_ptr G_FreeEntity;
 // Server replacement functions for hooks.
 void __cdecl My_Cmd_AddCommand(char* cmd, void* func);
 void __cdecl My_Sys_SetModuleOffset(char* moduleName, void* offset);
-#ifndef NOPY
 void __cdecl My_SV_ExecuteClientCommand(client_t *cl, char *s, qboolean clientOK);
 void __cdecl My_SV_SendServerCommand(client_t* cl, char* fmt, ...);
 void __cdecl My_SV_ClientEnterWorld(client_t* client, usercmd_t* cmd);
@@ -1565,7 +1564,6 @@ char* __cdecl My_ClientConnect(int clientNum, qboolean firstTime, qboolean isBot
 void __cdecl My_ClientSpawn(gentity_t* ent);
 
 void __cdecl My_G_StartKamikaze(gentity_t* ent);
-#endif
 
 // Custom commands added using Cmd_AddCommand during initialization.
 void __cdecl SendServerCommand(void); // "cmd"
@@ -1573,15 +1571,5 @@ void __cdecl CenterPrint(void); // "cp"
 void __cdecl RegularPrint(void); // "p"
 void __cdecl Slap(void); // "slap"
 void __cdecl Slay(void); // "slay"
-#ifndef NOPY
-// PyRcon gives the owner the ability to execute pyminqlx commands as if the
-// owner executed them.
-void __cdecl PyRcon(void);
-// PyCommand is special. It'll serve as the handler for console commands added
-// using Python. This means it can serve as the handler for a bunch of commands,
-// and it'll take care of redirecting it to Python.
-void __cdecl PyCommand(void);
-void __cdecl RestartPython(void); // "pyrestart"
-#endif
 
 #endif /* QUAKE_COMMON_H */

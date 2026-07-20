@@ -8,11 +8,7 @@
 #define DEBUG_PRINT_PREFIX "[minqlx] "
 #define DEBUG_ERROR_FORMAT "[minqlx] ERROR @ %s:%d in %s:\n" DEBUG_PRINT_PREFIX
 
-#ifndef NOPY
 #define SV_TAGS_PREFIX "minqlx"
-#else
-#define SV_TAGS_PREFIX "minqlx-nopy"
-#endif
 
 // TODO: Add minqlx version to serverinfo.
 

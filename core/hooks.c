@@ -13,9 +13,7 @@
 #include "simple_hook.h"
 #include "patches.h"
 
-#ifndef NOPY
 #include "../shim/dispatch.h"
-#endif
 
 // qagame module.
 void* qagame;
@@ -69,15 +67,12 @@ void __cdecl My_G_InitGame(int levelTime, int randomSeed, int restart) {
     }
     InitializeCvars();
 
-#ifndef NOPY
     if (restart)
 	   NewGameDispatcher(restart);
-#endif
 }
 
 // USED FOR PYTHON
 
-#ifndef NOPY
 void __cdecl My_SV_ExecuteClientCommand(client_t *cl, char *s, qboolean clientOK) {
     char* res = s;
     if (clientOK && cl->gentity) {
@@ -224,7 +219,6 @@ void __cdecl My_G_StartKamikaze(gentity_t* ent) {
     if (client_id != -1)
         KamikazeExplodeDispatcher(client_id, is_used_on_demand);
 }
-#endif
 
 // Hook static functions. Can be done before program even runs.
 void HookStatic(void) {
@@ -245,7 +239,6 @@ void HookStatic(void) {
     // ==============================
     //    ONLY NEEDED FOR PYTHON
     // ==============================
-#ifndef NOPY
     res = Hook((void*)SV_ExecuteClientCommand, My_SV_ExecuteClientCommand, (void*)&SV_ExecuteClientCommand);
     if (res) {
 		DebugPrint("ERROR: Failed to hook SV_ExecuteClientCommand: %d\n", res);
@@ -288,7 +281,6 @@ void HookStatic(void) {
         failed = 1;
     }
 
-#endif
 
     if (failed) {
 		DebugPrint("Exiting.\n");
@@ -320,7 +312,6 @@ void HookVm(void) {
 
 	G_RunFrame = *(G_RunFrame_ptr*)(vm_call_table + RELOFFSET_VM_CALL_RUNFRAME);
 
-#ifndef NOPY
 	*(void**)(vm_call_table + RELOFFSET_VM_CALL_RUNFRAME) = My_G_RunFrame;
 
 	int res, failed = 0, count = 0;
@@ -354,7 +345,6 @@ void HookVm(void) {
         DebugPrint("ERROR: Failed to rewind hook slot\nExiting.\n");
         exit(1);
     }
-#endif
 }
 
 

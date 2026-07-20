@@ -10,9 +10,7 @@
 #include "quake_common.h"
 #include "patterns.h"
 #include "maps_parser.h"
-#ifndef NOPY
 #include "../shim/dispatch.h"
-#endif
 
 // For comparison with the dedi's executable name to avoid segfaulting
 // bash and the likes if we run this through a script.
@@ -184,16 +182,12 @@ void InitializeStatic(void) {
     Cmd_AddCommand("print", RegularPrint);
     Cmd_AddCommand("slap", Slap);
     Cmd_AddCommand("slay", Slay);
-#ifndef NOPY
     Cmd_AddCommand("qlx", ShimRcon);
     Cmd_AddCommand("qlxrestart", ShimRestart);
-    // Kept for muscle-memory compatibility with the Python era.
-    Cmd_AddCommand("pyrestart", ShimRestart);
 
     // Start the IPC listener and spawn the sidecar. Never fatal: without a
     // sidecar the server simply runs as vanilla QLDS until one connects.
     Shim_Initialize();
-#endif
 
     common_initialized = 1;
 }

@@ -12,7 +12,7 @@ void Shim_RestartSidecar(void);
 // Console command handlers registered by InitializeStatic().
 void __cdecl ShimRcon(void);    // "qlx" — forwards to the rcon event.
 void __cdecl ShimCommand(void); // handler for commands added via add_console_command.
-void __cdecl ShimRestart(void); // "qlxrestart"/"pyrestart" — restarts the sidecar.
+void __cdecl ShimRestart(void); // "qlxrestart" — restarts the sidecar.
 
 // See pyminqlx.h history: lets player-info RPCs read a client slot that is
 // still CS_FREE while we're inside the connect hook for that client.
