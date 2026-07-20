@@ -1,10 +1,13 @@
-# minqlx
+# verge
 
-minqlx extends the Quake Live Dedicated Server with administration and
-scripting: chat commands, bans, permissions, team balancing, MOTD, vote
-control, and a modern plugin API — now in **TypeScript**, running on
-[Bun](https://bun.sh), with **zero external services** (no Python, no
-Redis, no pip).
+Server-side mod for the Quake Live Dedicated Server: admin & chat
+commands, bans, permissions, team balancing, MOTD, vote control — with
+plugins written in **TypeScript** on [Bun](https://bun.sh) and **zero
+external services**: no Python, no Redis, no pip. One config file, one
+SQLite database, one install command.
+
+verge is a modern rewrite of [minqlx](https://github.com/MinoMino/minqlx)'s
+scripting stack; the battle-tested C hooking core is inherited from it.
 
 ## How it works
 
@@ -17,26 +20,25 @@ qzeroded.x64  ←LD_PRELOAD─  minqlx.x64.so (C shim)
                             minqlx.db (SQLite)
 ```
 
-The `.so` inline-hooks the closed-source server (byte-pattern scanning +
-trampolines) and forwards engine events over a Unix socket to a supervised
-Bun process hosting the plugins. Plugin crashes can never corrupt engine
-memory: if the sidecar dies, the server keeps running as vanilla QLDS and
-the sidecar is respawned automatically. Blocking hooks (chat filtering,
-connect rejection) are bounded by a hard timeout, so the engine can never
-stall. See [docs/protocol.md](docs/protocol.md).
+The `.so` inline-hooks the closed-source server binary and forwards engine
+events over a Unix socket to a supervised Bun process hosting the plugins.
+Plugin crashes can never corrupt engine memory: if the sidecar dies, the
+server keeps running as vanilla QLDS and the sidecar respawns
+automatically. Blocking hooks are bounded by a hard timeout, so the engine
+can never stall. Details in [docs/protocol.md](docs/protocol.md).
 
 ## Install
 
 Into an existing [QLDS installation](https://steamdb.info/app/349090/):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/MinoMino/minqlx/master/tools/install.sh \
+curl -fsSL https://raw.githubusercontent.com/zaiste/verge/main/tools/install.sh \
   | bash -s -- /path/to/steamcmd/steamapps/common/qlds
 ```
 
-That unpacks `minqlx.x64.so`, a `bun` binary, the bundled runtime and
-plugins, and writes `minqlx.toml` (it asks for your SteamID64 — you're the
-owner). Then launch with:
+That unpacks the shim, a `bun` binary, the bundled runtime and plugins,
+and writes `minqlx.toml` (it asks for your SteamID64 — you're the owner).
+Launch:
 
 ```sh
 ./minqlx-run.sh +set net_port 27960 +exec server.cfg
@@ -45,37 +47,43 @@ owner). Then launch with:
 ### From source
 
 ```sh
-git clone <this repo> && cd minqlx
+git clone https://github.com/zaiste/verge && cd verge
 make so                                # needs only gcc + libc
-cd runtime && bun install && bun run bundle
+cd runtime && bun install && bun run bundle && cd ..
 cp bin/minqlx.x64.so tools/minqlx-run.sh minqlx.toml.example /path/to/qlds/
 cp -r bin/minqlx /path/to/qlds/minqlx
 ```
 
-## Configure
+On non-Linux hosts: `make CC="zig cc -target x86_64-linux-gnu" so`.
 
-Everything is in one file: [`minqlx.toml`](minqlx.toml.example) — owner,
-plugin list, per-plugin settings. Coming from the Python-era `qlx_*`
-cvars? See the [mapping table](docs/config.md). Migrating an existing
-Redis database: `bun tools/migrate-redis.ts redis://localhost:6379 minqlx.db`.
+## Use
 
-## Plugins
+Configuration lives in one file, [`minqlx.toml`](minqlx.toml.example):
+owner, plugin list, per-plugin settings. Env vars (`MINQLX_*`) override.
+Coming from Python-era `qlx_*` cvars? See the
+[mapping table](docs/config.md). Migrating a Redis database:
+`bun tools/migrate-redis.ts redis://localhost:6379 minqlx.db`.
 
-The classic plugin set, consolidated:
+In-game, commands start with `!` (permission levels 0–5, owner is 5):
+`!kick`, `!ban 3 2 weeks flaming`, `!mute`, `!setperm`, `!teams`,
+`!map`, ... — `!help` lists them. From the server console, `qlx !cmd`
+runs any command as owner; `qlxrestart` restarts the sidecar.
+
+Bundled plugins, the classic set consolidated:
 
 | Plugin | Provides |
 |---|---|
-| `admin` | ~35 admin commands (kick/ban/tempban/mute/silence/put/map/...), permissions (`!setperm`), vote auto-pass, teamsize vote bounds, leaver bans |
+| `admin` | ~35 moderation commands, permissions, bans/silences, vote auto-pass, leaver bans |
 | `identity` | `!name` display names, persistent clan tags |
 | `motd` | Message of the day on join |
 | `balance` | Elo-based `!teams` / `!balance` via qlstats |
 | `log` | Chat/command logs with rotation |
 | `fun` | Chat-triggered sounds |
 
-`workshop` and `solorace` became config flags (`[plugin.features]`).
-Manage at runtime with `!load` / `!unload` / `!reload <plugin>`.
+`workshop` and `solorace` are config flags (`[plugin.features]`). Manage
+at runtime with `!load` / `!unload` / `!reload <plugin>`.
 
-### Writing a plugin
+## Write a plugin
 
 Drop a file in `minqlx/plugins/` and add it to the config:
 
@@ -93,8 +101,8 @@ export default {
 } satisfies Plugin;
 ```
 
-The full API is typed — see [`runtime/src/plugin.ts`](runtime/src/plugin.ts)
-(context) and [`runtime/src/events.ts`](runtime/src/events.ts) (events).
+The full API is typed: [`runtime/src/plugin.ts`](runtime/src/plugin.ts)
+(context), [`runtime/src/events.ts`](runtime/src/events.ts) (events).
 `!reload hello` picks up edits live.
 
 ## Test without a game server
@@ -108,22 +116,17 @@ await server.chat(info.clientId, "!ban 0 1 day spam");
 ```
 
 ```sh
-bun test                # runs everything, no QLDS needed
+bun test                     # no QLDS needed
 cd runtime && bun run typecheck
 ```
 
-Dev loop against a real server: launch with `MINQLX_NO_SPAWN=1`, then run
-`bun --watch runtime/src/main.ts` in another terminal — the runtime
-reconnects to the live server on every edit.
+Against a real server: launch with `MINQLX_NO_SPAWN=1` and run
+`bun --watch runtime/src/main.ts` — the runtime reconnects on every edit.
+`MINQLX_TRACE=session.jsonl` records all shim↔sidecar traffic. A
+bot-driven end-to-end scenario ships as the `smoketest` plugin.
 
-## Development
+## License
 
-- `make so` — build the shim (`make nopy` builds the hook core with no
-  sidecar at all, as a diagnostic baseline)
-- On non-Linux hosts: `make CC="zig cc -target x86_64-linux-gnu" so`
-- `MINQLX_TRACE=session.jsonl` records all shim↔sidecar traffic
-- Console commands: `qlx <cmd>` (rcon as owner), `qlxrestart` (restart the
-  sidecar)
-
-minqlx is GPLv3. It began as [Mino's Python-based minqlx](https://github.com/MinoMino/minqlx);
-the C hooking core is inherited from it, the scripting stack is a rewrite.
+GPLv3. The C hooking core originates from
+[Mino's minqlx](https://github.com/MinoMino/minqlx); the scripting stack
+is a ground-up rewrite.

@@ -7,7 +7,7 @@
 # No python, no redis, no pip. Requires: curl, tar.
 set -euo pipefail
 
-REPO="${MINQLX_REPO:-MinoMino/minqlx}"
+REPO="${MINQLX_REPO:-zaiste/verge}"
 QLDS_DIR="${1:-}"
 
 if [ -z "$QLDS_DIR" ] || [ ! -x "$QLDS_DIR/qzeroded.x64" ]; then
