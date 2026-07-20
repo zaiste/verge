@@ -9,6 +9,7 @@
 #include <poll.h>
 #include <time.h>
 #include <signal.h>
+#include <pthread.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/wait.h>
@@ -36,7 +37,14 @@ static struct {
     int frame_every;
     unsigned frame_counter;
 
-    pid_t child_pid;
+    // Sidecar processes are created by a broker: a single-threaded helper
+    // forked once at startup. Creating processes from this multithreaded
+    // engine process later is not reliable (fork/posix_spawn can deadlock
+    // on other threads' locks), and the broker also guarantees the sidecar
+    // dies with the server. Protocol on the socketpair: we send 's'=spawn,
+    // 'k'=kill; the broker sends 'x' when the sidecar exits.
+    int broker_fd;
+    int child_alive;
     int no_spawn;
     long long next_spawn_at_ms; // monotonic deadline for respawn
     int backoff_ms;
@@ -60,7 +68,22 @@ static struct {
     unsigned next_hook_id;
 
     FILE* trace; // MINQLX_TRACE: tee all protocol traffic to a JSONL file
-} shim = { .listen_fd = -1, .conn_fd = -1, .backoff_ms = 1000 };
+
+    // An idle QLDS stops running frames entirely, so child supervision and
+    // socket accept can't rely on Shim_Tick: a small supervisor thread does
+    // both. It never calls engine functions and never executes RPCs (those
+    // stay on the engine main thread); all shim state is guarded by `lock`
+    // (recursive: nested dispatches re-enter from the main thread).
+    pthread_mutex_t lock;
+    pthread_t supervisor;
+    pthread_t main_thread;
+    int supervisor_running;
+
+    // RPCs received off the main thread wait here until the next Shim_Tick:
+    // engine functions may only run on the engine main thread.
+    cJSON* pending_rpcs[256];
+    int pending_rpc_count;
+} shim = { .listen_fd = -1, .conn_fd = -1, .broker_fd = -1, .backoff_ms = 1000 };
 
 static long long now_ms(void) {
     struct timespec ts;
@@ -81,6 +104,9 @@ static void drop_connection(const char* why) {
         close(shim.conn_fd);
         shim.conn_fd = -1;
     }
+    for (int i = 0; i < shim.pending_rpc_count; i++)
+        cJSON_Delete(shim.pending_rpcs[i]);
+    shim.pending_rpc_count = 0;
     shim.hello_received = 0;
     shim.subs = 0;
     shim.frame_every = 0;
@@ -109,50 +135,123 @@ int Shim_IsSubscribed(int sub_bit) {
  * ================================================================
 */
 
-static void spawn_sidecar(void) {
-    if (shim.no_spawn)
-        return;
+extern char** environ;
 
+// Runs in the broker child process: single-threaded, so fork is safe here
+// forever. Spawns/kills the sidecar on command and reports exits. Exits
+// (killing the sidecar) when the engine end of the socketpair closes.
+static void broker_process(int cmd_fd) {
+    signal(SIGPIPE, SIG_IGN);
+
+    static char socket_env[1024];
+    snprintf(socket_env, sizeof(socket_env), "MINQLX_SOCKET=%s", shim.socket_path);
+    static char* envp[1024];
+    int n = 0;
+    envp[n++] = socket_env;
+    for (int i = 0; environ[i] && n < 1022; i++) {
+        if (strncmp(environ[i], "MINQLX_SOCKET=", 14) != 0)
+            envp[n++] = environ[i];
+    }
+    envp[n] = NULL;
+    char* const argv[] = { shim.bun_path, shim.entry_path, NULL };
+
+    pid_t child = 0;
+    for (;;) {
+        struct pollfd pfd = { .fd = cmd_fd, .events = POLLIN };
+        poll(&pfd, 1, 200);
+
+        if (pfd.revents & (POLLIN | POLLHUP | POLLERR)) {
+            char cmd;
+            ssize_t r = read(cmd_fd, &cmd, 1);
+            if (r == 0 || (r < 0 && errno != EAGAIN && errno != EINTR)) {
+                // Engine is gone: take the sidecar with us.
+                if (child > 0)
+                    kill(child, SIGKILL);
+                _exit(0);
+            }
+            if (r == 1 && cmd == 's') {
+                pid_t pid = fork();
+                if (pid == 0) {
+                    execve(shim.bun_path, argv, envp);
+                    _exit(127);
+                }
+                if (pid > 0) {
+                    child = pid;
+                    DebugPrint("Spawned sidecar: %s %s (pid %d)\n",
+                               shim.bun_path, shim.entry_path, pid);
+                }
+            }
+            else if (r == 1 && cmd == 'k' && child > 0)
+                kill(child, SIGKILL);
+        }
+
+        int status;
+        pid_t r2;
+        while ((r2 = waitpid(-1, &status, WNOHANG)) > 0) {
+            if (r2 == child) {
+                child = 0;
+                char x = 'x';
+                if (write(cmd_fd, &x, 1) != 1)
+                    _exit(0);
+            }
+        }
+    }
+}
+
+// Forked while the engine process is still effectively single-threaded.
+static void start_broker(void) {
+    int sv[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == -1) {
+        DebugPrint("socketpair() failed: %s. Running without sidecar.\n", strerror(errno));
+        return;
+    }
     pid_t pid = fork();
     if (pid < 0) {
-        DebugPrint("fork() failed: %s\n", strerror(errno));
+        DebugPrint("fork() for broker failed: %s. Running without sidecar.\n", strerror(errno));
+        close(sv[0]);
+        close(sv[1]);
         return;
     }
     if (pid == 0) {
-        setenv("MINQLX_SOCKET", shim.socket_path, 1);
-        char* const argv[] = { shim.bun_path, shim.entry_path, NULL };
-        execvp(shim.bun_path, argv);
-        fprintf(stderr, DEBUG_PRINT_PREFIX "execvp(%s) failed: %s\n",
-                shim.bun_path, strerror(errno));
-        _exit(127);
+        close(sv[0]);
+        // Don't leak the broker's command channel into sidecars.
+        fcntl(sv[1], F_SETFD, FD_CLOEXEC);
+        broker_process(sv[1]);
+        _exit(0); // unreachable
     }
-    shim.child_pid = pid;
-    DebugPrint("Spawned sidecar: %s %s (pid %d)\n", shim.bun_path, shim.entry_path, pid);
+    close(sv[1]);
+    shim.broker_fd = sv[0];
+    fcntl(shim.broker_fd, F_SETFL, fcntl(shim.broker_fd, F_GETFL, 0) | O_NONBLOCK);
+    fcntl(shim.broker_fd, F_SETFD, FD_CLOEXEC);
+}
+
+static void spawn_sidecar(void) {
+    if (shim.no_spawn || shim.broker_fd == -1)
+        return;
+    shim.child_alive = 1;
+    char s = 's';
+    if (write(shim.broker_fd, &s, 1) != 1)
+        DebugPrint("Failed to signal the spawn broker: %s\n", strerror(errno));
 }
 
 static void supervise_child(void) {
-    if (shim.no_spawn)
+    if (shim.no_spawn || shim.broker_fd == -1)
         return;
 
-    if (shim.child_pid > 0) {
-        int status;
-        pid_t res = waitpid(shim.child_pid, &status, WNOHANG);
-        if (res == shim.child_pid) {
-            if (WIFEXITED(status))
-                DebugPrint("Sidecar exited with status %d.\n", WEXITSTATUS(status));
-            else if (WIFSIGNALED(status))
-                DebugPrint("Sidecar killed by signal %d.\n", WTERMSIG(status));
-            shim.child_pid = 0;
-            drop_connection("sidecar process exited");
-            shim.next_spawn_at_ms = now_ms() + shim.backoff_ms;
-            DebugPrint("Respawning sidecar in %d ms.\n", shim.backoff_ms);
-            if (shim.backoff_ms < 30000)
-                shim.backoff_ms *= 2;
-        }
-        return;
+    char c;
+    while (read(shim.broker_fd, &c, 1) == 1) {
+        if (c != 'x')
+            continue;
+        DebugPrint("Sidecar exited.\n");
+        shim.child_alive = 0;
+        drop_connection("sidecar process exited");
+        shim.next_spawn_at_ms = now_ms() + shim.backoff_ms;
+        DebugPrint("Respawning sidecar in %d ms.\n", shim.backoff_ms);
+        if (shim.backoff_ms < 30000)
+            shim.backoff_ms *= 2;
     }
 
-    if (shim.next_spawn_at_ms && now_ms() >= shim.next_spawn_at_ms) {
+    if (!shim.child_alive && shim.next_spawn_at_ms && now_ms() >= shim.next_spawn_at_ms) {
         shim.next_spawn_at_ms = 0;
         spawn_sidecar();
     }
@@ -161,10 +260,13 @@ static void supervise_child(void) {
 void Shim_RestartSidecar(void) {
     DebugPrint("Restarting sidecar...\n");
     drop_connection("restart requested");
-    if (shim.child_pid > 0)
-        kill(shim.child_pid, SIGTERM);
     shim.backoff_ms = 1000;
-    // supervise_child() reaps it and respawns on the next tick.
+    if (shim.broker_fd != -1) {
+        char k = 'k';
+        if (write(shim.broker_fd, &k, 1) != 1)
+            DebugPrint("Failed to signal the spawn broker: %s\n", strerror(errno));
+    }
+    // The broker's exit notification triggers the respawn.
 }
 
 /*
@@ -245,7 +347,7 @@ static void handle_hello(cJSON* msg) {
     DebugPrint("Sidecar ready (subs: 0x%x, frameEvery: %d).\n", shim.subs, shim.frame_every);
 }
 
-static void handle_rpc(cJSON* msg) {
+static void execute_rpc(cJSON* msg) {
     cJSON* id = cJSON_GetObjectItemCaseSensitive(msg, "id");
     cJSON* fn = cJSON_GetObjectItemCaseSensitive(msg, "fn");
     cJSON* args = cJSON_GetObjectItemCaseSensitive(msg, "args");
@@ -267,6 +369,27 @@ static void handle_rpc(cJSON* msg) {
         cJSON_AddStringToObject(res, "err", err ? err : "unknown error");
     }
     send_json(res);
+}
+
+static void handle_rpc(cJSON* msg) {
+    if (pthread_equal(pthread_self(), shim.main_thread)) {
+        execute_rpc(msg);
+        return;
+    }
+    // Supervisor thread: park the RPC for the next engine frame.
+    if (shim.pending_rpc_count >= (int)(sizeof(shim.pending_rpcs) / sizeof(*shim.pending_rpcs))) {
+        drop_connection("pending rpc queue full");
+        return;
+    }
+    shim.pending_rpcs[shim.pending_rpc_count++] = cJSON_Duplicate(msg, 1);
+}
+
+static void drain_pending_rpcs(void) {
+    for (int i = 0; i < shim.pending_rpc_count; i++) {
+        execute_rpc(shim.pending_rpcs[i]);
+        cJSON_Delete(shim.pending_rpcs[i]);
+    }
+    shim.pending_rpc_count = 0;
 }
 
 static void handle_hookres(cJSON* msg) {
@@ -385,10 +508,28 @@ static void accept_if_pending(void) {
 }
 
 void Shim_Tick(void) {
+    pthread_mutex_lock(&shim.lock);
     supervise_child();
     accept_if_pending();
+    drain_pending_rpcs();
     flush_out_buf();
     read_and_process();
+    pthread_mutex_unlock(&shim.lock);
+}
+
+static void* supervisor_main(void* arg) {
+    (void)arg;
+    DebugPrint("Supervisor thread running.\n");
+    while (shim.supervisor_running) {
+        pthread_mutex_lock(&shim.lock);
+        supervise_child();
+        accept_if_pending();
+        flush_out_buf();
+        read_and_process(); // safe: RPCs are parked, not executed, off-main
+        pthread_mutex_unlock(&shim.lock);
+        usleep(250000);
+    }
+    return NULL;
 }
 
 /*
@@ -406,20 +547,25 @@ static cJSON* make_msg(const char* t, const char* name, cJSON* args) {
 }
 
 void Shim_SendEvent(int sub_bit, const char* name, cJSON* args) {
+    pthread_mutex_lock(&shim.lock);
     if (!Shim_IsSubscribed(sub_bit)) {
+        pthread_mutex_unlock(&shim.lock);
         cJSON_Delete(args);
         return;
     }
     cJSON* msg = make_msg("ev", name, args);
     send_json(msg);
+    pthread_mutex_unlock(&shim.lock);
 }
 
 hook_result_t Shim_SendHookAndWait(int sub_bit, const char* name, cJSON* args,
                                    char* buf, size_t buf_size) {
+    pthread_mutex_lock(&shim.lock);
     // Give a just-(re)connected sidecar a chance before deciding to pass through.
     accept_if_pending();
 
     if (!Shim_IsSubscribed(sub_bit) || shim.wait_depth >= MAX_WAIT_DEPTH) {
+        pthread_mutex_unlock(&shim.lock);
         cJSON_Delete(args);
         return HOOK_PASS;
     }
@@ -428,8 +574,10 @@ hook_result_t Shim_SendHookAndWait(int sub_bit, const char* name, cJSON* args,
     cJSON* msg = make_msg("hook", name, args);
     cJSON_AddNumberToObject(msg, "id", id);
     send_json(msg);
-    if (shim.conn_fd == -1) // send_json may have dropped the connection
+    if (shim.conn_fd == -1) { // send_json may have dropped the connection
+        pthread_mutex_unlock(&shim.lock);
         return HOOK_PASS;
+    }
 
     hook_wait_t* w = &shim.wait_stack[shim.wait_depth++];
     w->id = id;
@@ -455,6 +603,7 @@ hook_result_t Shim_SendHookAndWait(int sub_bit, const char* name, cJSON* args,
         }
         if (pfd.revents & POLLOUT)
             flush_out_buf();
+        drain_pending_rpcs();
         read_and_process(); // executes nested RPCs, may complete our wait
         if (shim.conn_fd == -1)
             break;
@@ -467,6 +616,7 @@ hook_result_t Shim_SendHookAndWait(int sub_bit, const char* name, cJSON* args,
     }
     shim.wait_depth--; // ids of abandoned (timed-out) waits are simply forgotten;
                        // late replies won't match anything and get dropped
+    pthread_mutex_unlock(&shim.lock);
     return result;
 }
 
@@ -491,6 +641,30 @@ void Shim_Initialize(void) {
         snprintf(shim.bun_path, sizeof(shim.bun_path), "%s",
                  stat("./bun", &st) == 0 ? "./bun" : "bun");
     }
+    // Resolve to an absolute path now: the child may only call execve
+    // (no PATH search) between fork and exec.
+    if (!strchr(shim.bun_path, '/')) {
+        const char* path_env = getenv("PATH");
+        char resolved[sizeof(shim.bun_path)] = "";
+        size_t name_len = strlen(shim.bun_path);
+        while (path_env && *path_env) {
+            const char* colon = strchr(path_env, ':');
+            size_t len = colon ? (size_t)(colon - path_env) : strlen(path_env);
+            if (len + 1 + name_len + 1 <= sizeof(resolved)) {
+                memcpy(resolved, path_env, len);
+                resolved[len] = '/';
+                memcpy(resolved + len + 1, shim.bun_path, name_len + 1);
+                if (access(resolved, X_OK) == 0) {
+                    memcpy(shim.bun_path, resolved, strlen(resolved) + 1);
+                    break;
+                }
+            }
+            resolved[0] = 0;
+            path_env = colon ? colon + 1 : NULL;
+        }
+        if (!resolved[0])
+            DebugPrint("Could not find '%s' in PATH; sidecar spawn will fail.\n", shim.bun_path);
+    }
 
     env = getenv("MINQLX_ENTRY");
     snprintf(shim.entry_path, sizeof(shim.entry_path), "%s", env ? env : "minqlx/main.js");
@@ -513,8 +687,23 @@ void Shim_Initialize(void) {
     shim.in_cap = 65536;
     shim.in_buf = malloc(shim.in_cap);
 
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&shim.lock, &attr);
+    shim.main_thread = pthread_self();
+
+    // The server's stdout is usually a log file; line-buffer it so shim
+    // diagnostics (sidecar exits, respawns, timeouts) appear promptly.
+    setvbuf(stdout, NULL, _IOLBF, 0);
+
     // Don't die on writes to a closed socket.
     signal(SIGPIPE, SIG_IGN);
+
+    // Fork the spawn broker before anything else (threads, sockets): this
+    // is the last moment process creation is reliably safe in-process.
+    if (!shim.no_spawn)
+        start_broker();
 
     shim.listen_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (shim.listen_fd == -1) {
@@ -530,7 +719,7 @@ void Shim_Initialize(void) {
         shim.listen_fd = -1;
         return;
     }
-    snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", shim.socket_path);
+    memcpy(addr.sun_path, shim.socket_path, strlen(shim.socket_path) + 1);
     unlink(shim.socket_path); // stale socket from a previous run
     if (bind(shim.listen_fd, (struct sockaddr*)&addr, sizeof(addr)) == -1 ||
             listen(shim.listen_fd, 1) == -1) {
@@ -548,17 +737,33 @@ void Shim_Initialize(void) {
         DebugPrint("MINQLX_NO_SPAWN set: start the sidecar manually.\n");
     else
         spawn_sidecar();
+
+    shim.supervisor_running = 1;
+    if (pthread_create(&shim.supervisor, NULL, supervisor_main, NULL) != 0) {
+        DebugPrint("Failed to start supervisor thread: %s\n", strerror(errno));
+        shim.supervisor_running = 0;
+    }
 }
 
 void Shim_Shutdown(void) {
+    if (shim.supervisor_running) {
+        shim.supervisor_running = 0;
+        pthread_join(shim.supervisor, NULL);
+    }
+    pthread_mutex_lock(&shim.lock);
     drop_connection("shutdown");
     if (shim.listen_fd != -1) {
         close(shim.listen_fd);
         shim.listen_fd = -1;
     }
-    if (shim.child_pid > 0)
-        kill(shim.child_pid, SIGTERM);
+    if (shim.broker_fd != -1) {
+        // Closing the command channel makes the broker kill the sidecar
+        // and exit.
+        close(shim.broker_fd);
+        shim.broker_fd = -1;
+    }
     unlink(shim.socket_path);
+    pthread_mutex_unlock(&shim.lock);
 }
 
 /*
@@ -570,6 +775,11 @@ void Shim_Shutdown(void) {
 // Called from FrameDispatcher (i.e. every G_RunFrame, engine main thread).
 void Shim_FrameEvent(void);
 void Shim_FrameEvent(void) {
+#ifdef SHIM_DEBUG_TICKS
+    static unsigned tick_count;
+    if (++tick_count % 400 == 1)
+        fprintf(stderr, "[shim] frame tick %u\n", tick_count);
+#endif
     Shim_Tick();
     if (shim.frame_every > 0 && Shim_IsSubscribed(SUB_FRAME)) {
         if (++shim.frame_counter >= (unsigned)shim.frame_every) {

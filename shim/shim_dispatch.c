@@ -85,6 +85,14 @@ void NewGameDispatcher(int restart) {
 
 char* SetConfigstringDispatcher(int index, char* value) {
     static char buf[4096];
+    // The engine re-sets some configstrings with unchanged values every
+    // frame (e.g. 700/701 on current builds). A no-change set carries no
+    // information, so skip the round trip entirely.
+    char current[4096];
+    SV_GetConfigstring(index, current, sizeof(current));
+    if (!strcmp(current, value))
+        return value;
+
     switch (Shim_SendHookAndWait(SUB_SET_CONFIGSTRING, "set_configstring",
                                  args_is(index, value), buf, sizeof(buf))) {
         case HOOK_CANCEL:  return NULL;

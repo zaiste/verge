@@ -11,8 +11,8 @@ endif
 
 BINDIR = bin
 CC ?= gcc
-CFLAGS += -shared -std=gnu11 -Wall
-LDFLAGS += -ldl -lm
+CFLAGS += -shared -std=gnu11 -Wall -pthread
+LDFLAGS += -ldl -lm -pthread
 VERSION := MINQLX_VERSION=\"$(shell git describe --long --tags --dirty --always)\"
 
 CORE_SOURCES = core/dllmain.c core/commands.c core/simple_hook.c core/hooks.c \

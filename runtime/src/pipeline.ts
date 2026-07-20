@@ -239,6 +239,22 @@ export class Pipeline {
     if (player) await this.events.dispatch("player_spawn", player);
   }
 
+  /**
+   * Called once after connecting. If a game is already running (the sidecar
+   * started or restarted mid-map), run the new-game path so the caches
+   * prime, plugins learn the current map, and the stats listener starts.
+   */
+  async lateInit(): Promise<void> {
+    try {
+      await this.cs.fetch(CS_SERVERINFO);
+    } catch {
+      return; // engine not fully initialized yet: the new_game event will come
+    }
+    if (!this.cs.get(CS_SERVERINFO)) return;
+    log.info("game already in progress; running late initialization.");
+    await this.onNewGame(false);
+  }
+
   private async onNewGame(restart: boolean): Promise<void> {
     await this.cs.prefetch();
     await this.store.syncAll();

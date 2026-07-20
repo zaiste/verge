@@ -3,9 +3,16 @@
 The C shim inside `minqlx.x64.so` talks to the Bun sidecar over a Unix
 domain socket using newline-delimited JSON (UTF-8; invalid engine bytes are
 lossily replaced). The shim listens on `$MINQLX_SOCKET` (default
-`minqlx.sock` in the server directory) and spawns/supervises the sidecar
+`minqlx.sock` in the server directory) and supervises the sidecar
 (`bun minqlx/main.js`). Kill the sidecar and the server keeps running as
-vanilla QLDS; the shim respawns it with exponential backoff (1s → 30s).
+vanilla QLDS; it is respawned with exponential backoff (1s → 30s).
+
+Supervision does not depend on engine frames (an idle QLDS stops running
+them): a supervisor thread watches the socket, and sidecar processes are
+created by a small single-threaded *spawn broker* forked at startup —
+creating processes from the multithreaded engine later is unreliable, and
+the broker also guarantees the sidecar dies with the server. RPCs received
+off the engine's main thread are parked and executed on the next frame.
 
 The authoritative message/type definitions live in
 [`runtime/src/protocol.ts`](../runtime/src/protocol.ts).
@@ -38,7 +45,9 @@ Five events block the engine's main thread awaiting `hookres`:
 `client_command`, `server_command`, `set_configstring`, `player_connect`
 (string result = rejection message shown to the client), and
 `console_print` (cancel only; replacement is ignored by the engine).
-Everything else is fire-and-forget.
+Everything else is fire-and-forget. `set_configstring` is only dispatched
+when the value actually changes (the engine re-sets some indexes with
+identical values every frame).
 
 The wait is bounded by `MINQLX_HOOK_TIMEOUT_MS` (default 100 ms); on
 timeout the engine proceeds as if the hook returned pass-through, and the

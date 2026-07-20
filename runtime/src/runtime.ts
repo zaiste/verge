@@ -71,6 +71,17 @@ export class Runtime {
     this.pipeline.register();
     this.registerBuiltinCommands();
     registerFeatures(this.config, this.engine, this.events, this.game, this.store);
+
+    // Must be registered before lateInit() can dispatch new_game.
+    if (this.config.stats.enabled) {
+      let statsStarted = false;
+      this.events.on("new_game", "core", () => {
+        if (statsStarted) return;
+        statsStarted = true;
+        this.stats = new StatsListener(this.engine, this.events, this.store, this.config.stats.password);
+        this.stats.start().catch((e) => log.error("stats listener failed to start:", e));
+      });
+    }
     for (const name of this.config.server.plugins) {
       try {
         await this.loadPlugin(name);
@@ -79,19 +90,9 @@ export class Runtime {
       }
     }
     await this.engine.start(SUBSCRIPTIONS);
+    await this.pipeline.lateInit();
     // Expired-key cleanup once an hour.
     setInterval(() => this.db.sweep(), 3600_000).unref?.();
-
-    // Start the ZMQ stats listener once the game (and its cvars) are up.
-    if (this.config.stats.enabled) {
-      let started = false;
-      this.events.on("new_game", "core", () => {
-        if (started) return;
-        started = true;
-        this.stats = new StatsListener(this.engine, this.events, this.store, this.config.stats.password);
-        this.stats.start().catch((e) => log.error("stats listener failed to start:", e));
-      });
-    }
     log.info(`runtime ready: ${this.plugins.size} plugin(s) loaded.`);
   }
 
