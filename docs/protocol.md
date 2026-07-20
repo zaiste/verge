@@ -51,17 +51,32 @@ identical values every frame).
 
 The wait is bounded by `MINQLX_HOOK_TIMEOUT_MS` (default 100 ms); on
 timeout the engine proceeds as if the hook returned pass-through, and the
-late reply is dropped. While waiting, the shim executes incoming `rpc`
-messages — that's what lets a ban handler `kick()` synchronously from
-inside the connect hook.
+late reply is dropped. While waiting, the shim executes incoming
+**read-only** `rpc` messages (`player_info`, `get_cvar`, ...) — that's
+what lets a hook handler look up state before answering.
 
 ## Threading model
 
-The engine is single-threaded and its functions are not thread-safe. The
-shim therefore executes RPCs only on the engine's main thread, at two
-points: while blocked in a hook, and when draining the socket at the top
-of every `G_RunFrame` (~every 25 ms). An RPC sent from the sidecar
-outside a hook simply lands on the next frame.
+The engine is single-threaded and its functions are not re-entrant:
+running an arbitrary engine call while the engine is blocked inside a
+hook dispatch can recurse engine→game→engine and corrupt state. RPCs are
+therefore split into two classes:
+
+- **Read-only** RPCs (no engine side effects) execute the moment they
+  arrive on the engine's main thread — including inside a hook wait.
+- **Mutating** RPCs are executed only at the top of `G_RunFrame`
+  (~every 25 ms) — the same safe point Python minqlx's `@next_frame`
+  used. When one arrives at an unsafe moment (inside a hook wait or
+  another RPC), it is acknowledged immediately (`ok:true, val:null`) and
+  parked; a handler awaiting it resolves right away and the call lands
+  on the next frame. Order among parked RPCs is preserved. Consequence:
+  a mutating RPC's return value is only meaningful when it executed
+  directly (e.g. sent outside any hook context); don't read a mutating
+  result from inside a hook handler.
+
+A ban handler therefore rejects connects via the `player_connect` string
+result (not a kick round-trip); a `kick()` issued from a hook handler is
+acknowledged instantly and takes effect on the next frame.
 
 ## Numbers
 

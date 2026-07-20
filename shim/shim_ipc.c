@@ -58,6 +58,7 @@ static struct {
     char* in_buf;
     size_t in_len;
     size_t in_cap;
+    int in_rpc; // depth of execute_rpc calls on the main thread
 
     // Outgoing buffer for partial writes.
     char* out_buf;
@@ -347,16 +348,25 @@ static void handle_hello(cJSON* msg) {
     DebugPrint("Sidecar ready (subs: 0x%x, frameEvery: %d).\n", shim.subs, shim.frame_every);
 }
 
+// An "id"-less message executes without sending a reply (it was already
+// acknowledged when parked).
 static void execute_rpc(cJSON* msg) {
     cJSON* id = cJSON_GetObjectItemCaseSensitive(msg, "id");
     cJSON* fn = cJSON_GetObjectItemCaseSensitive(msg, "fn");
     cJSON* args = cJSON_GetObjectItemCaseSensitive(msg, "args");
-    if (!cJSON_IsNumber(id) || !cJSON_IsString(fn))
+    if (!cJSON_IsString(fn))
         return;
 
     const char* err = NULL;
+    shim.in_rpc++;
     cJSON* val = Shim_ExecuteRpc(fn->valuestring, args, &err);
+    shim.in_rpc--;
 
+    if (!cJSON_IsNumber(id)) {
+        if (val)
+            cJSON_Delete(val);
+        return;
+    }
     cJSON* res = cJSON_CreateObject();
     cJSON_AddStringToObject(res, "t", "rpcres");
     cJSON_AddNumberToObject(res, "id", id->valuedouble);
@@ -371,17 +381,47 @@ static void execute_rpc(cJSON* msg) {
     send_json(res);
 }
 
-static void handle_rpc(cJSON* msg) {
-    if (pthread_equal(pthread_self(), shim.main_thread)) {
-        execute_rpc(msg);
-        return;
-    }
-    // Supervisor thread: park the RPC for the next engine frame.
+// Parks an RPC for the frame drain. With ack, the reply is sent NOW (the
+// sidecar sees mutating RPCs as fire-and-acknowledge) and the parked copy
+// is stripped of its id so execution won't reply a second time.
+static void park_rpc(cJSON* msg, int ack) {
     if (shim.pending_rpc_count >= (int)(sizeof(shim.pending_rpcs) / sizeof(*shim.pending_rpcs))) {
         drop_connection("pending rpc queue full");
         return;
     }
-    shim.pending_rpcs[shim.pending_rpc_count++] = cJSON_Duplicate(msg, 1);
+    cJSON* dup = cJSON_Duplicate(msg, 1);
+    if (ack) {
+        cJSON* id = cJSON_GetObjectItemCaseSensitive(dup, "id");
+        if (cJSON_IsNumber(id)) {
+            cJSON* res = cJSON_CreateObject();
+            cJSON_AddStringToObject(res, "t", "rpcres");
+            cJSON_AddNumberToObject(res, "id", id->valuedouble);
+            cJSON_AddBoolToObject(res, "ok", 1);
+            cJSON_AddNullToObject(res, "val");
+            send_json(res);
+        }
+        cJSON_DeleteItemFromObjectCaseSensitive(dup, "id");
+    }
+    shim.pending_rpcs[shim.pending_rpc_count++] = dup;
+}
+
+// Engine functions are not re-entrant: running an arbitrary RPC while the
+// engine is blocked inside a hook dispatch (or inside another RPC) can
+// recurse engine->game->engine and corrupt state. So only side-effect-free
+// RPCs run inline at those points; mutating RPCs are acknowledged and parked
+// for the top of the next frame — the same safe point Python minqlx's
+// @next_frame used.
+static void handle_rpc(cJSON* msg) {
+    if (!pthread_equal(pthread_self(), shim.main_thread)) {
+        park_rpc(msg, 0); // supervisor thread: reply comes at execution
+        return;
+    }
+    const char* fn = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(msg, "fn"));
+    if ((fn && Shim_RpcIsReadOnly(fn)) || (shim.wait_depth == 0 && !shim.in_rpc)) {
+        execute_rpc(msg);
+        return;
+    }
+    park_rpc(msg, 1);
 }
 
 static void drain_pending_rpcs(void) {
@@ -438,18 +478,52 @@ static void process_line(char* line) {
     cJSON_Delete(msg);
 }
 
+// Extracts, consumes, and processes ONE complete line from the input buffer.
+// The line is copied out and removed from in_buf BEFORE process_line runs:
+// process_line can re-enter read_and_process (an RPC that calls into the
+// engine fires a blocking hook, whose wait loop reads the socket), which
+// reallocs and shifts in_buf — so no pointer or index into it may live
+// across the call. Returns 1 if a line was consumed.
+static int process_one_buffered_line(void) {
+    if (shim.conn_fd == -1 || shim.in_len == 0)
+        return 0;
+    char* nl = memchr(shim.in_buf, '\n', shim.in_len);
+    if (!nl)
+        return 0;
+    size_t len = (size_t)(nl - shim.in_buf);
+    char* line = malloc(len + 1);
+    if (!line) {
+        drop_connection("out of memory");
+        return 0;
+    }
+    memcpy(line, shim.in_buf, len);
+    line[len] = 0;
+    size_t rest = shim.in_len - (len + 1);
+    memmove(shim.in_buf, nl + 1, rest);
+    shim.in_len = rest;
+    if (len > 0)
+        process_line(line);
+    free(line);
+    return 1;
+}
+
 // Reads whatever is available and processes complete lines. Returns 1 if any
-// message was processed.
+// message was processed. Re-entrant: an outer invocation interrupted inside
+// process_line resumes on a buffer the nested one left consistent.
 static int read_and_process(void) {
     if (shim.conn_fd == -1)
         return 0;
 
     int processed = 0;
+    while (process_one_buffered_line())
+        processed = 1;
+
     char chunk[65536];
-    for (;;) {
+    while (shim.conn_fd != -1) {
         ssize_t n = read(shim.conn_fd, chunk, sizeof(chunk));
         if (n > 0) {
-            if (shim.in_len + n > MAX_LINE_SIZE) {
+            // After the drain above, in_len only ever holds one partial line.
+            if (shim.in_len + (size_t)n > MAX_LINE_SIZE) {
                 drop_connection("input line too long");
                 return processed;
             }
@@ -459,22 +533,8 @@ static int read_and_process(void) {
             }
             memcpy(shim.in_buf + shim.in_len, chunk, n);
             shim.in_len += n;
-
-            // Process complete lines.
-            size_t start = 0;
-            for (size_t i = 0; i < shim.in_len; i++) {
-                if (shim.in_buf[i] != '\n')
-                    continue;
-                shim.in_buf[i] = 0;
-                if (i > start)
-                    process_line(shim.in_buf + start);
+            while (process_one_buffered_line())
                 processed = 1;
-                start = i + 1;
-                if (shim.conn_fd == -1)
-                    return processed; // connection dropped while processing
-            }
-            memmove(shim.in_buf, shim.in_buf + start, shim.in_len - start);
-            shim.in_len -= start;
         }
         else if (n == 0) {
             drop_connection("sidecar closed the socket");
@@ -489,6 +549,7 @@ static int read_and_process(void) {
             return processed;
         }
     }
+    return processed;
 }
 
 static void accept_if_pending(void) {
@@ -603,8 +664,7 @@ hook_result_t Shim_SendHookAndWait(int sub_bit, const char* name, cJSON* args,
         }
         if (pfd.revents & POLLOUT)
             flush_out_buf();
-        drain_pending_rpcs();
-        read_and_process(); // executes nested RPCs, may complete our wait
+        read_and_process(); // read-only RPCs run inline, may complete our wait
         if (shim.conn_fd == -1)
             break;
     }

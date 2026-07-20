@@ -935,21 +935,24 @@ typedef cJSON* (*rpc_fn_t)(const cJSON* args, const char** err);
 // GUARD_VM    — additionally needs the game module (g_entities/level)
 enum { GUARD_NONE, GUARD_CVARS, GUARD_VM };
 
-static const struct { const char* name; rpc_fn_t fn; int guard; } rpc_table[] = {
-    { "player_info", rpc_player_info, GUARD_VM },
-    { "players_info", rpc_players_info, GUARD_VM },
-    { "get_userinfo", rpc_get_userinfo, GUARD_CVARS },
-    { "player_state", rpc_player_state, GUARD_VM },
-    { "player_stats", rpc_player_stats, GUARD_VM },
+// readonly = 1 marks RPCs with no engine side effects: they may run inline
+// while the engine is blocked inside a hook dispatch. Everything else is
+// parked until the top of the next frame (see handle_rpc in shim_ipc.c).
+static const struct { const char* name; rpc_fn_t fn; int guard; int readonly; } rpc_table[] = {
+    { "player_info", rpc_player_info, GUARD_VM, 1 },
+    { "players_info", rpc_players_info, GUARD_VM, 1 },
+    { "get_userinfo", rpc_get_userinfo, GUARD_CVARS, 1 },
+    { "player_state", rpc_player_state, GUARD_VM, 1 },
+    { "player_stats", rpc_player_stats, GUARD_VM, 1 },
     { "send_server_command", rpc_send_server_command, GUARD_CVARS },
     { "client_command", rpc_client_command, GUARD_CVARS },
     { "console_command", rpc_console_command, GUARD_NONE },
     { "console_print", rpc_console_print, GUARD_NONE },
     { "add_console_command", rpc_add_console_command, GUARD_NONE },
-    { "get_cvar", rpc_get_cvar, GUARD_NONE },
+    { "get_cvar", rpc_get_cvar, GUARD_NONE, 1 },
     { "set_cvar", rpc_set_cvar, GUARD_NONE },
     { "set_cvar_limit", rpc_set_cvar_limit, GUARD_NONE },
-    { "get_configstring", rpc_get_configstring, GUARD_NONE },
+    { "get_configstring", rpc_get_configstring, GUARD_NONE, 1 },
     { "set_configstring", rpc_set_configstring, GUARD_NONE },
     { "kick", rpc_kick, GUARD_CVARS },
     { "force_vote", rpc_force_vote, GUARD_VM },
@@ -998,4 +1001,11 @@ cJSON* Shim_ExecuteRpc(const char* fn, const cJSON* args, const char** err) {
     snprintf(err_buf, sizeof(err_buf), "unknown rpc function: %s", fn);
     *err = err_buf;
     return NULL;
+}
+
+int Shim_RpcIsReadOnly(const char* fn) {
+    for (int i = 0; rpc_table[i].name; i++)
+        if (!strcmp(rpc_table[i].name, fn))
+            return rpc_table[i].readonly;
+    return 0;
 }

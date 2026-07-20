@@ -42,5 +42,7 @@ hook_result_t Shim_SendHookAndWait(int sub_bit, const char* name, cJSON* args,
 // (never NULL on success). On failure returns NULL and sets *err to a static
 // or cJSON-lifetime error string.
 cJSON* Shim_ExecuteRpc(const char* fn, const cJSON* args, const char** err);
+// 1 if the RPC has no engine side effects (safe to run inside a hook wait).
+int Shim_RpcIsReadOnly(const char* fn);
 
 #endif /* SHIM_INTERNAL_H */
