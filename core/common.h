@@ -31,6 +31,12 @@ typedef int64_t sint;
 typedef uint32_t pint;
 typedef int32_t sint;
 #define __cdecl __attribute__((__cdecl__))
+#else
+// Other architectures can't run the QLDS hooks, but arch-neutral parts
+// (e.g. the IPC shim under its test harness) still compile.
+typedef uintptr_t pint;
+typedef intptr_t sint;
+#define __cdecl
 #endif
 
 extern int common_initialized;

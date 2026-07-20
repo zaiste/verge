@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <dlfcn.h>
 
 #include "patterns.h"
@@ -13,7 +14,7 @@
 #include "patches.h"
 
 #ifndef NOPY
-#include "pyminqlx.h"
+#include "../shim/dispatch.h"
 #endif
 
 // qagame module.

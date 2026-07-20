@@ -10,7 +10,7 @@
 #include "common.h"
 
 #ifndef NOPY
-#include "pyminqlx.h"
+#include "../shim/dispatch.h"
 #endif
 
 void __cdecl SendServerCommand(void) {
@@ -81,35 +81,5 @@ void __cdecl Slay(void) {
         Com_Printf("The player is currently not active.\n");
 }
 
-#ifndef NOPY
-// Execute a pyminqlx command as if it were the owner executing it.
-// Output will appear in the console.
-void __cdecl PyRcon(void) {
-    RconDispatcher(Cmd_Args());
-}
-
-void __cdecl PyCommand(void) {
-	if (!custom_command_handler) {
-	        return; // No registered handler.
-	}
-	PyGILState_STATE gstate = PyGILState_Ensure();
-
-	PyObject* result = PyObject_CallFunction(custom_command_handler, "s", Cmd_Args());
-	if (result == Py_False) {
-		Com_Printf("The command failed to be executed. pyminqlx found no handler.\n");
-	}
-
-	Py_XDECREF(result);
-	PyGILState_Release(gstate);
-}
-
-void __cdecl RestartPython(void) {
-    Com_Printf("Restarting Python...\n");
-    if (PyMinqlx_IsInitialized())
-    	PyMinqlx_Finalize();
-    PyMinqlx_Initialize();
-    // minqlx initializes after the first new game starts, but since the game already
-    // start, we manually trigger the event to make it initialize properly.
-    NewGameDispatcher(0);
-}
-#endif
+// The former PyRcon/PyCommand/RestartPython console commands live in
+// shim/shim_dispatch.c as ShimRcon/ShimCommand/ShimRestart.

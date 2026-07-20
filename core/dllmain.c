@@ -11,7 +11,7 @@
 #include "patterns.h"
 #include "maps_parser.h"
 #ifndef NOPY
-#include "pyminqlx.h"
+#include "../shim/dispatch.h"
 #endif
 
 // For comparison with the dedi's executable name to avoid segfaulting
@@ -185,18 +185,14 @@ void InitializeStatic(void) {
     Cmd_AddCommand("slap", Slap);
     Cmd_AddCommand("slay", Slay);
 #ifndef NOPY
-    Cmd_AddCommand("qlx", PyRcon);
-    Cmd_AddCommand("pycmd", PyCommand);
-    Cmd_AddCommand("pyrestart", RestartPython);
-#endif
-	
-#ifndef NOPY
-	// Initialize Python and run the main script.
-	PyMinqlx_InitStatus_t res = PyMinqlx_Initialize();
-    if (res != PYM_SUCCESS) {
-        DebugPrint("Python initialization failed: %d\n", res);
-        exit(1);
-    }
+    Cmd_AddCommand("qlx", ShimRcon);
+    Cmd_AddCommand("qlxrestart", ShimRestart);
+    // Kept for muscle-memory compatibility with the Python era.
+    Cmd_AddCommand("pyrestart", ShimRestart);
+
+    // Start the IPC listener and spawn the sidecar. Never fatal: without a
+    // sidecar the server simply runs as vanilla QLDS until one connects.
+    Shim_Initialize();
 #endif
 
     common_initialized = 1;

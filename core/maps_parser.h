@@ -17,6 +17,10 @@ typedef int64_t sint;
 #elif defined(__i386) || defined(_M_IX86)
 typedef uint32_t pint;
 typedef int32_t sint;
+#else
+// Arch-neutral fallback so non-x86 hosts can compile the IPC shim tests.
+typedef uintptr_t pint;
+typedef intptr_t sint;
 #endif
 
 // Permission flags. The two last are mutually exclusive.

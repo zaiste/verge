@@ -28,3 +28,10 @@
 *.app
 
 bin/minqlx.zip
+
+# TS runtime
+node_modules/
+bin/minqlx/
+*.db
+*.sock
+minqlx-trace*.jsonl
