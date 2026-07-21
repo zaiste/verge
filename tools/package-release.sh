@@ -16,11 +16,15 @@ make clean >/dev/null && tools/build-shim.sh
 echo "Bundling runtime..."
 (cd runtime && bun install --frozen-lockfile && bun run bundle)
 
-echo "Fetching bun ($BUN_VERSION)..."
+# The baseline build runs without AVX2. Bun's default build does not, and
+# on a CPU that lacks it the sidecar dies with a bare SIGILL that looks
+# like a verge bug; the sidecar shuttles JSON, so the speed it gives up is
+# not worth that failure mode. Same reasoning as the glibc floor.
+echo "Fetching bun ($BUN_VERSION, baseline)..."
 if [ "$BUN_VERSION" = "latest" ]; then
-  url="https://github.com/oven-sh/bun/releases/latest/download/bun-linux-x64.zip"
+  url="https://github.com/oven-sh/bun/releases/latest/download/bun-linux-x64-baseline.zip"
 else
-  url="https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip"
+  url="https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64-baseline.zip"
 fi
 curl -fsSL "$url" -o "$STAGE/bun.zip"
 unzip -q "$STAGE/bun.zip" -d "$STAGE"
@@ -36,5 +40,7 @@ cp tools/verge-run.sh "$STAGE/pkg/"
 chmod +x "$STAGE/pkg/bun" "$STAGE/pkg/verge-run.sh"
 
 OUT="verge-${VERSION}-linux-x64.tar.gz"
-tar -czf "$OUT" -C "$STAGE/pkg" .
+# --no-xattrs: macOS tar otherwise embeds provenance attributes that make
+# GNU tar warn on every entry at extraction time.
+tar --no-xattrs -czf "$OUT" -C "$STAGE/pkg" .
 echo "Wrote $OUT"

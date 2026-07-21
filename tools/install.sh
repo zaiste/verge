@@ -1,7 +1,7 @@
 #!/bin/bash
 # verge installer: downloads the release tarball into a QLDS directory.
 #
-#   curl -fsSL https://raw.githubusercontent.com/<repo>/main/tools/install.sh \
+#   curl -fsSL https://raw.githubusercontent.com/zaiste/verge/main/tools/install.sh \
 #     | bash -s -- /path/to/steamcmd/steamapps/common/qlds
 #
 # No python, no redis, no pip. Requires: curl, tar.
@@ -37,14 +37,16 @@ tar -xzf "$tmp/verge.tar.gz" -C "$QLDS_DIR"
 
 # First-time config.
 if [ ! -f "$QLDS_DIR/verge.toml" ]; then
-  if [ -t 0 ]; then
-    read -rp "Owner SteamID64 (find yours at steamid.io): " owner
-  else
-    owner="${VERGE_OWNER:-}"
+  owner="${VERGE_OWNER:-}"
+  # Under `curl | bash` stdin is the script itself, so ask the terminal.
+  if [ -z "$owner" ] && [ -r /dev/tty ]; then
+    read -rp "Owner SteamID64 (find yours at steamid.io): " owner < /dev/tty || true
   fi
   sed "s/76561198000000000/${owner:-76561198000000000}/" \
     "$QLDS_DIR/verge.toml.example" > "$QLDS_DIR/verge.toml"
   echo "Wrote $QLDS_DIR/verge.toml"
+  [ -z "$owner" ] &&
+    echo "No owner set: put your SteamID64 in $QLDS_DIR/verge.toml before starting." >&2
 fi
 
 echo
