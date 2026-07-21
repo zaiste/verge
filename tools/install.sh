@@ -15,11 +15,18 @@ if [ -z "$QLDS_DIR" ] || [ ! -x "$QLDS_DIR/qzeroded.x64" ]; then
   exit 1
 fi
 
-# QLDS is a glibc binary, so the shim is built against glibc too.
-if ! ldd --version 2>&1 | grep -qi 'glibc\|gnu'; then
-  echo "Warning: no glibc detected. QLDS itself needs glibc; if the server" >&2
-  echo "runs here through a compatibility layer, verge should too." >&2
-fi
+# QLDS is a glibc binary, so the shim is built against glibc too. Match on
+# a captured string rather than a pipeline: under `set -o pipefail`, grep -q
+# exiting on the first match can SIGPIPE ldd and fail the whole pipeline,
+# which warned on perfectly good glibc systems.
+libc=$(ldd --version 2>&1 || true)
+case "$libc" in
+  *GLIBC*|*glibc*|*GNU*|*gnu*) ;;
+  *)
+    echo "Warning: no glibc detected. QLDS itself needs glibc; if the server" >&2
+    echo "runs here through a compatibility layer, verge should too." >&2
+    ;;
+esac
 
 echo "Fetching latest verge release from $REPO..."
 url=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" |
