@@ -56,6 +56,12 @@ cp -r bin/verge /path/to/qlds/verge
 
 On non-Linux hosts: `make CC="zig cc -target x86_64-linux-gnu" so`.
 
+`make so` links against the build host's glibc, which is fine for a shim
+you built on the machine that will run it. Release artifacts are built
+with `tools/build-shim.sh` instead: it pins the glibc floor (2.17) so the
+library loads on older server distributions, and fails if anything
+creeps above it.
+
 ## Use
 
 Configuration lives in one file, [`verge.toml`](verge.toml.example):

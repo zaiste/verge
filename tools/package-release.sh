@@ -11,7 +11,7 @@ STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 
 echo "Building verge.x64.so..."
-make clean >/dev/null && make so
+make clean >/dev/null && tools/build-shim.sh
 
 echo "Bundling runtime..."
 (cd runtime && bun install --frozen-lockfile && bun run bundle)
