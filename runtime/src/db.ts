@@ -1,8 +1,9 @@
 /**
  * Persistent state on bun:sqlite, replacing Redis. One kv table with
  * optional expiry covers everything the plugins need (permissions, bans,
- * mutes, flags). Key names keep the historical "minqlx:" Redis scheme so a
- * Redis import is a plain key copy.
+ * mutes, flags). Key names mirror the Redis scheme minqlx used under a
+ * "verge:" namespace, so importing an old database is a prefix rename
+ * (see tools/migrate-redis.ts).
  */
 import { Database } from "bun:sqlite";
 import type { SteamId } from "./protocol";
@@ -70,7 +71,7 @@ export class Db {
     return remaining > 0 ? remaining : null;
   }
 
-  /** Keys matching a glob pattern (e.g. "minqlx:players:*:permission"). */
+  /** Keys matching a glob pattern (e.g. "verge:players:*:permission"). */
   keys(pattern: string): string[] {
     return this.keysStmt.all(pattern, Date.now()).map((r) => r.key);
   }
@@ -90,12 +91,12 @@ export class Db {
 
   getPermission(steamId: SteamId): number {
     if (this.owner && steamId === this.owner) return 5;
-    const val = this.get(`minqlx:players:${steamId}:permission`);
+    const val = this.get(`verge:players:${steamId}:permission`);
     return val === null ? 0 : parseInt(val, 10) || 0;
   }
 
   setPermission(steamId: SteamId, level: number): void {
-    this.set(`minqlx:players:${steamId}:permission`, level);
+    this.set(`verge:players:${steamId}:permission`, level);
   }
 
   hasPermission(steamId: SteamId, level = 5): boolean {
@@ -103,11 +104,11 @@ export class Db {
   }
 
   setFlag(steamId: SteamId, flag: string, value = true): void {
-    this.set(`minqlx:players:${steamId}:flags:${flag}`, value ? 1 : 0);
+    this.set(`verge:players:${steamId}:flags:${flag}`, value ? 1 : 0);
   }
 
   getFlag(steamId: SteamId, flag: string, defaultValue = false): boolean {
-    const val = this.get(`minqlx:players:${steamId}:flags:${flag}`);
+    const val = this.get(`verge:players:${steamId}:flags:${flag}`);
     return val === null ? defaultValue : Boolean(parseInt(val, 10));
   }
 }

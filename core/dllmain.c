@@ -182,8 +182,8 @@ void InitializeStatic(void) {
     Cmd_AddCommand("print", RegularPrint);
     Cmd_AddCommand("slap", Slap);
     Cmd_AddCommand("slay", Slay);
-    Cmd_AddCommand("qlx", ShimRcon);
-    Cmd_AddCommand("qlxrestart", ShimRestart);
+    Cmd_AddCommand("verge", ShimRcon);
+    Cmd_AddCommand("vergerestart", ShimRestart);
 
     // Start the IPC listener and spawn the sidecar. Never fatal: without a
     // sidecar the server simply runs as vanilla QLDS until one connects.

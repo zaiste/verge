@@ -69,15 +69,15 @@ function stamp(): string {
 
 export const log = {
   debug(...args: unknown[]) {
-    if (process.env.MINQLX_DEBUG) console.log(`[minqlx ${stamp()}]`, ...args);
+    if (process.env.VERGE_DEBUG) console.log(`[verge ${stamp()}]`, ...args);
   },
   info(...args: unknown[]) {
-    console.log(`[minqlx ${stamp()}]`, ...args);
+    console.log(`[verge ${stamp()}]`, ...args);
   },
   warn(...args: unknown[]) {
-    console.warn(`[minqlx ${stamp()}] WARNING:`, ...args);
+    console.warn(`[verge ${stamp()}] WARNING:`, ...args);
   },
   error(...args: unknown[]) {
-    console.error(`[minqlx ${stamp()}] ERROR:`, ...args);
+    console.error(`[verge ${stamp()}] ERROR:`, ...args);
   },
 };

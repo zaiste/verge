@@ -37,7 +37,7 @@ describe("admin: ban flow", () => {
     expect(String(again.rejection)).toContain("Very rude!");
 
     // Ban record uses the historical key scheme, with a ttl.
-    const key = `minqlx:players:${sid}:ban`;
+    const key = `verge:players:${sid}:ban`;
     expect(server.runtime.db.get(key)).not.toBeNull();
     expect(server.runtime.db.ttl(key)).toBeGreaterThan(290);
 
@@ -61,7 +61,7 @@ describe("admin: ban flow", () => {
     const { server, adminId } = await adminServer();
     await server.chat(adminId, `!ban ${OFFLINE_SID} 5 minutes spam`);
 
-    const key = `minqlx:players:${OFFLINE_SID}:ban`;
+    const key = `verge:players:${OFFLINE_SID}:ban`;
     const record = server.runtime.db.get(key);
     expect(record).not.toBeNull();
 
@@ -74,7 +74,7 @@ describe("admin: ban flow", () => {
   test("!tempban is a ban alias and duration parsing matches ban.py", async () => {
     const { server, adminId } = await adminServer();
     await server.chat(adminId, `!tempban ${OFFLINE_SID} 2 days griefing`);
-    const ttl = server.runtime.db.ttl(`minqlx:players:${OFFLINE_SID}:ban`);
+    const ttl = server.runtime.db.ttl(`verge:players:${OFFLINE_SID}:ban`);
     expect(ttl).toBeGreaterThan(2 * 86400 - 5);
     expect(ttl).toBeLessThanOrEqual(2 * 86400);
 
@@ -94,7 +94,7 @@ describe("admin: ban flow", () => {
     server.engine.clearCalls();
     await server.chat(adminId, `!ban ${OWNER_ID} 1 day`);
     expect(server.messagesTo(null).some((m) => m.includes("cannot be banned"))).toBe(true);
-    expect(server.runtime.db.get(`minqlx:players:${OWNER_ID}:ban`)).toBeNull();
+    expect(server.runtime.db.get(`verge:players:${OWNER_ID}:ban`)).toBeNull();
   });
 
   test("checkban reports active bans", async () => {
@@ -155,7 +155,7 @@ describe("admin: silence flow", () => {
     expect(await server.chat(1, "hey")).toBe(false);
 
     // Force-expire the silence record (ttl semantics).
-    const key = `minqlx:players:${target.info.steamId}:silence`;
+    const key = `verge:players:${target.info.steamId}:silence`;
     server.runtime.db.set(key, server.runtime.db.get(key) ?? "{}", { ttl: -1 });
 
     server.engine.clearCalls();
@@ -170,7 +170,7 @@ describe("admin: silence flow", () => {
     server.engine.clearCalls();
     await server.chat(adminId, "!silence 1 1 day");
     expect(server.messagesTo(null).some((m) => m.includes("cannot be silenced"))).toBe(true);
-    expect(server.runtime.db.get(`minqlx:players:${target.info.steamId}:silence`)).toBeNull();
+    expect(server.runtime.db.get(`verge:players:${target.info.steamId}:silence`)).toBeNull();
   });
 });
 
@@ -344,7 +344,7 @@ describe("admin: representative commands", () => {
 
     // Disconnect stamps last_seen.
     await server.disconnect(target.info.clientId);
-    expect(server.runtime.db.get(`minqlx:players:${sid}:last_seen`)).not.toBeNull();
+    expect(server.runtime.db.get(`verge:players:${sid}:last_seen`)).not.toBeNull();
     server.engine.clearCalls();
     await server.chat(adminId, `!seen ${sid}`);
     expect(server.messagesTo(null).some((m) => m.includes("hour(s) and ^60^7 minute(s) ago"))).toBe(true);

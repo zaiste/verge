@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createTestServer, OWNER_ID } from "../testkit/src/fixtures";
 
-const MOTD_KEY = "minqlx:motd";
+const MOTD_KEY = "verge:motd";
 // delay_ms 0 keeps tests fast; a short sleep lets the delayed send run.
 const cfg = { motd: { delay_ms: 0 } };
 

@@ -6,7 +6,7 @@
  * db flag). A per-server cooldown stops sound spam. Also brings the
  * all-important !cookies command.
  *
- * Config keys ([plugin.fun] in minqlx.toml):
+ * Config keys ([plugin.fun] in verge.toml):
  *   sound_delay - minimum seconds between sounds (default 3, was
  *                 qlx_funSoundDelay)
  */

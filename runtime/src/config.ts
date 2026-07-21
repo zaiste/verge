@@ -1,7 +1,7 @@
 /**
- * Configuration: one minqlx.toml in the server directory, replacing the
+ * Configuration: one verge.toml in the server directory, replacing the
  * qlx_* cvar sprawl. Environment variables win over the file:
- * MINQLX_OWNER, MINQLX_PLUGINS (comma-separated), MINQLX_DATABASE.
+ * VERGE_OWNER, VERGE_PLUGINS (comma-separated), VERGE_DATABASE.
  */
 import { log } from "./util";
 
@@ -38,7 +38,7 @@ const DEFAULTS: Config = {
     owner: "",
     plugins: ["admin", "identity", "motd", "log"],
     commandPrefix: "!",
-    database: "minqlx.db",
+    database: "verge.db",
   },
   stats: { enabled: true, password: "" },
   features: { workshop: [], solorace: false },
@@ -49,7 +49,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-export async function loadConfig(path = process.env.MINQLX_CONFIG ?? "minqlx.toml"): Promise<Config> {
+export async function loadConfig(path = process.env.VERGE_CONFIG ?? "verge.toml"): Promise<Config> {
   let raw: Record<string, unknown> = {};
   const file = Bun.file(path);
   if (await file.exists()) {
@@ -65,14 +65,14 @@ export async function loadConfig(path = process.env.MINQLX_CONFIG ?? "minqlx.tom
 
   const config: Config = {
     server: {
-      owner: process.env.MINQLX_OWNER ?? String(server.owner ?? DEFAULTS.server.owner),
-      plugins: process.env.MINQLX_PLUGINS
-        ? process.env.MINQLX_PLUGINS.split(",").map((s) => s.trim())
+      owner: process.env.VERGE_OWNER ?? String(server.owner ?? DEFAULTS.server.owner),
+      plugins: process.env.VERGE_PLUGINS
+        ? process.env.VERGE_PLUGINS.split(",").map((s) => s.trim())
         : Array.isArray(server.plugins)
           ? server.plugins.map(String)
           : DEFAULTS.server.plugins,
       commandPrefix: String(server.command_prefix ?? DEFAULTS.server.commandPrefix),
-      database: process.env.MINQLX_DATABASE ?? String(server.database ?? DEFAULTS.server.database),
+      database: process.env.VERGE_DATABASE ?? String(server.database ?? DEFAULTS.server.database),
     },
     stats: {
       enabled: Boolean(stats.enabled ?? DEFAULTS.stats.enabled),

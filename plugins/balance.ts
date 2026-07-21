@@ -14,7 +14,7 @@
  *   !remrating/!remelo       - remove a local rating override (perm 3)
  *   !ratings/!elos/!selo     - list everyone's ratings
  *
- * Config keys ([plugin.balance] in minqlx.toml), formerly qlx_balance* cvars:
+ * Config keys ([plugin.balance] in verge.toml), formerly qlx_balance* cvars:
  *   use_local               - use local DB rating overrides (default true,
  *                             was qlx_balanceUseLocal)
  *   api_url                 - rating API base URL (default
@@ -33,7 +33,7 @@ import type { Channel } from "../runtime/src/channels";
 import { EventResult } from "../runtime/src/constants";
 
 const RATING_KEY = (steamId: string, gametype: string) =>
-  `minqlx:players:${steamId}:ratings:${gametype}`;
+  `verge:players:${steamId}:ratings:${gametype}`;
 const MAX_ATTEMPTS = 3;
 const CACHE_EXPIRE_MS = 60 * 10 * 1000; // 10 minute TTL.
 const DEFAULT_RATING = 1500;

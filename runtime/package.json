@@ -1,10 +1,10 @@
 {
-  "name": "minqlx-runtime",
-  "version": "0.6.0",
+  "name": "verge-runtime",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "bundle": "bun build src/main.ts --outdir ../bin/minqlx --target bun && bun build ../plugins/*.ts --outdir ../bin/minqlx/plugins --target bun",
+    "bundle": "bun build src/main.ts --outdir ../bin/verge --target bun && bun build ../plugins/*.ts --outdir ../bin/verge/plugins --target bun",
     "typecheck": "tsgo --noEmit",
     "test": "bun test"
   },

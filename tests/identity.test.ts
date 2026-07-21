@@ -9,7 +9,7 @@ describe("identity: clan tags", () => {
     const { info } = await server.connect({ name: "Sarge" });
 
     await server.chat(info.clientId, "!clan QLX");
-    expect(server.runtime.db.get(`minqlx:players:${info.steamId}:clantag`)).toBe("QLX");
+    expect(server.runtime.db.get(`verge:players:${info.steamId}:clantag`)).toBe("QLX");
     // Applied immediately to the player's configstring.
     const cs = server.engine.configstrings.get(CS_PLAYERS + info.clientId) ?? "";
     expect(cs).toContain("cn\\QLX");
@@ -29,7 +29,7 @@ describe("identity: clan tags", () => {
     const { info } = await server.connect({ name: "Sarge" });
     await server.chat(info.clientId, "!clan TAG");
     await server.chat(info.clientId, "!clan");
-    expect(server.runtime.db.get(`minqlx:players:${info.steamId}:clantag`)).toBeNull();
+    expect(server.runtime.db.get(`verge:players:${info.steamId}:clantag`)).toBeNull();
     const cs = server.engine.configstrings.get(CS_PLAYERS + info.clientId) ?? "";
     expect(cs).not.toContain("cn\\TAG");
     expect(server.messagesTo(info.clientId).some((m) => m.includes("clan tag has been cleared"))).toBe(true);
@@ -39,7 +39,7 @@ describe("identity: clan tags", () => {
     const server = await createTestServer({ plugins: ["identity"] });
     const { info } = await server.connect({ name: "Sarge" });
     await server.chat(info.clientId, "!clan TOOLONG");
-    expect(server.runtime.db.get(`minqlx:players:${info.steamId}:clantag`)).toBeNull();
+    expect(server.runtime.db.get(`verge:players:${info.steamId}:clantag`)).toBeNull();
     expect(server.messagesTo(info.clientId).some((m) => m.includes("at most 5 characters"))).toBe(true);
   });
 });
@@ -51,7 +51,7 @@ describe("identity: names", () => {
     const { info } = await server.connect({ name: "Keel", steamId: sid });
 
     await server.chat(info.clientId, "!name ^1Keel");
-    expect(server.runtime.db.get(`minqlx:players:${sid}:colored_name`)).toBe("^7^1Keel");
+    expect(server.runtime.db.get(`verge:players:${sid}:colored_name`)).toBe("^7^1Keel");
     expect(server.messagesTo(info.clientId).some((m) => m.includes("has been registered"))).toBe(true);
     // The name was applied through a userinfo rewrite.
     const applied = server.engine
@@ -75,7 +75,7 @@ describe("identity: names", () => {
     const server = await createTestServer({ plugins: ["identity"] });
     const { info } = await server.connect({ name: "Keel" });
     await server.chat(info.clientId, "!name ^2Xaero");
-    expect(server.runtime.db.get(`minqlx:players:${info.steamId}:colored_name`)).toBeNull();
+    expect(server.runtime.db.get(`verge:players:${info.steamId}:colored_name`)).toBeNull();
     expect(
       server.messagesTo(info.clientId).some((m) => m.includes("must match your current Steam name")),
     ).toBe(true);
@@ -88,7 +88,7 @@ describe("identity: names", () => {
     });
     const { info } = await server.connect({ name: "Keel" });
     await server.chat(info.clientId, "!name ^2Xaero");
-    expect(server.runtime.db.get(`minqlx:players:${info.steamId}:colored_name`)).toBe("^7^2Xaero");
+    expect(server.runtime.db.get(`verge:players:${info.steamId}:colored_name`)).toBe("^7^2Xaero");
   });
 
   test("registered name is merged into userinfo when renaming to the Steam name", async () => {
@@ -99,7 +99,7 @@ describe("identity: names", () => {
       steamId: sid,
       userinfo: "\\name\\KeelOld\\rate\\25000",
     });
-    server.runtime.db.set(`minqlx:players:${sid}:colored_name`, "^1Keel");
+    server.runtime.db.set(`verge:players:${sid}:colored_name`, "^1Keel");
 
     // Renaming to the recorded Steam name swaps in the registered name.
     const res = await server.clientCommand(info.clientId, 'userinfo "\\name\\Keel\\rate\\25000"');
@@ -107,7 +107,7 @@ describe("identity: names", () => {
 
     // Renaming to anything else resets the registered name.
     await server.clientCommand(info.clientId, 'userinfo "\\name\\Other\\rate\\25000"');
-    expect(server.runtime.db.get(`minqlx:players:${sid}:colored_name`)).toBeNull();
+    expect(server.runtime.db.get(`verge:players:${sid}:colored_name`)).toBeNull();
     expect(
       server.messagesTo(info.clientId).some((m) => m.includes("registered name has been reset")),
     ).toBe(true);
@@ -117,9 +117,9 @@ describe("identity: names", () => {
     const server = await createTestServer({ plugins: ["identity"] });
     const { info } = await server.connect({ name: "Keel" });
     await server.chat(info.clientId, "!name ^4Keel");
-    expect(server.runtime.db.get(`minqlx:players:${info.steamId}:colored_name`)).toBe("^7^4Keel");
+    expect(server.runtime.db.get(`verge:players:${info.steamId}:colored_name`)).toBe("^7^4Keel");
     await server.chat(info.clientId, "!name");
-    expect(server.runtime.db.get(`minqlx:players:${info.steamId}:colored_name`)).toBeNull();
+    expect(server.runtime.db.get(`verge:players:${info.steamId}:colored_name`)).toBeNull();
     expect(server.messagesTo(info.clientId).some((m) => m.includes("has been removed"))).toBe(true);
   });
 });

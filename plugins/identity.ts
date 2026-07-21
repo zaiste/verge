@@ -17,8 +17,8 @@ import { cleanText, formatVariables, parseVariables } from "../runtime/src/util"
 /** Player configstrings start at index 529 (CS_PLAYERS). */
 const CS_PLAYERS = 529;
 
-const nameKey = (steamId: string) => `minqlx:players:${steamId}:colored_name`;
-const tagKey = (steamId: string) => `minqlx:players:${steamId}:clantag`;
+const nameKey = (steamId: string) => `verge:players:${steamId}:colored_name`;
+const tagKey = (steamId: string) => `verge:players:${steamId}:clantag`;
 
 const EXCESSIVE_COLORS_RE = /(?:\^.)+(\^.)/g;
 

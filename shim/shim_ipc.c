@@ -68,7 +68,7 @@ static struct {
     int wait_depth;
     unsigned next_hook_id;
 
-    FILE* trace; // MINQLX_TRACE: tee all protocol traffic to a JSONL file
+    FILE* trace; // VERGE_TRACE: tee all protocol traffic to a JSONL file
 
     // An idle QLDS stops running frames entirely, so child supervision and
     // socket accept can't rely on Shim_Tick: a small supervisor thread does
@@ -145,12 +145,12 @@ static void broker_process(int cmd_fd) {
     signal(SIGPIPE, SIG_IGN);
 
     static char socket_env[1024];
-    snprintf(socket_env, sizeof(socket_env), "MINQLX_SOCKET=%s", shim.socket_path);
+    snprintf(socket_env, sizeof(socket_env), "VERGE_SOCKET=%s", shim.socket_path);
     static char* envp[1024];
     int n = 0;
     envp[n++] = socket_env;
     for (int i = 0; environ[i] && n < 1022; i++) {
-        if (strncmp(environ[i], "MINQLX_SOCKET=", 14) != 0)
+        if (strncmp(environ[i], "VERGE_SOCKET=", 13) != 0)
             envp[n++] = environ[i];
     }
     envp[n] = NULL;
@@ -689,10 +689,10 @@ hook_result_t Shim_SendHookAndWait(int sub_bit, const char* name, cJSON* args,
 void Shim_Initialize(void) {
     const char* env;
 
-    env = getenv("MINQLX_SOCKET");
-    snprintf(shim.socket_path, sizeof(shim.socket_path), "%s", env ? env : "minqlx.sock");
+    env = getenv("VERGE_SOCKET");
+    snprintf(shim.socket_path, sizeof(shim.socket_path), "%s", env ? env : "verge.sock");
 
-    env = getenv("MINQLX_BUN");
+    env = getenv("VERGE_BUN");
     if (env)
         snprintf(shim.bun_path, sizeof(shim.bun_path), "%s", env);
     else {
@@ -726,17 +726,17 @@ void Shim_Initialize(void) {
             DebugPrint("Could not find '%s' in PATH; sidecar spawn will fail.\n", shim.bun_path);
     }
 
-    env = getenv("MINQLX_ENTRY");
-    snprintf(shim.entry_path, sizeof(shim.entry_path), "%s", env ? env : "minqlx/main.js");
+    env = getenv("VERGE_ENTRY");
+    snprintf(shim.entry_path, sizeof(shim.entry_path), "%s", env ? env : "verge/main.js");
 
-    env = getenv("MINQLX_HOOK_TIMEOUT_MS");
+    env = getenv("VERGE_HOOK_TIMEOUT_MS");
     shim.hook_timeout_ms = env ? atoi(env) : 100;
     if (shim.hook_timeout_ms <= 0)
         shim.hook_timeout_ms = 100;
 
-    shim.no_spawn = getenv("MINQLX_NO_SPAWN") != NULL;
+    shim.no_spawn = getenv("VERGE_NO_SPAWN") != NULL;
 
-    env = getenv("MINQLX_TRACE");
+    env = getenv("VERGE_TRACE");
     if (env) {
         shim.trace = fopen(env, "a");
         if (!shim.trace)
@@ -790,11 +790,11 @@ void Shim_Initialize(void) {
         return;
     }
     fcntl(shim.listen_fd, F_SETFL, fcntl(shim.listen_fd, F_GETFL, 0) | O_NONBLOCK);
-    DebugPrint("minqlx %s listening on %s (hook timeout %d ms).\n",
-               MINQLX_VERSION, shim.socket_path, shim.hook_timeout_ms);
+    DebugPrint("verge %s listening on %s (hook timeout %d ms).\n",
+               VERGE_VERSION, shim.socket_path, shim.hook_timeout_ms);
 
     if (shim.no_spawn)
-        DebugPrint("MINQLX_NO_SPAWN set: start the sidecar manually.\n");
+        DebugPrint("VERGE_NO_SPAWN set: start the sidecar manually.\n");
     else
         spawn_sidecar();
 

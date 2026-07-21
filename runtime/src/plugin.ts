@@ -27,7 +27,7 @@ import type { SteamId } from "./protocol";
 
 export interface PluginContext {
   readonly name: string;
-  /** This plugin's [plugin.<name>] section from minqlx.toml. */
+  /** This plugin's [plugin.<name>] section from verge.toml. */
   readonly config: Record<string, unknown>;
   readonly fullConfig: Config;
   readonly db: Db;

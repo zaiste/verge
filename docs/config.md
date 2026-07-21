@@ -1,23 +1,23 @@
 # Configuration
 
-All configuration lives in one file, `minqlx.toml`, next to the server
-binary (see [`minqlx.toml.example`](../minqlx.toml.example)). The old
+All configuration lives in one file, `verge.toml`, next to the server
+binary (see [`verge.toml.example`](../verge.toml.example)). The old
 Python-era `qlx_*` cvars are gone.
 
-Environment overrides: `MINQLX_OWNER`, `MINQLX_PLUGINS` (comma-separated),
-`MINQLX_DATABASE`, `MINQLX_CONFIG` (path to the TOML file).
+Environment overrides: `VERGE_OWNER`, `VERGE_PLUGINS` (comma-separated),
+`VERGE_DATABASE`, `VERGE_CONFIG` (path to the TOML file).
 
 Shim-level (engine side) settings are environment variables only, set
-before launching the server: `MINQLX_SOCKET`, `MINQLX_BUN`, `MINQLX_ENTRY`,
-`MINQLX_HOOK_TIMEOUT_MS`, `MINQLX_NO_SPAWN`, `MINQLX_TRACE`.
+before launching the server: `VERGE_SOCKET`, `VERGE_BUN`, `VERGE_ENTRY`,
+`VERGE_HOOK_TIMEOUT_MS`, `VERGE_NO_SPAWN`, `VERGE_TRACE`.
 
-## qlx_* cvar → minqlx.toml mapping
+## qlx_* cvar → verge.toml mapping
 
 | Old cvar | New setting |
 |---|---|
 | `qlx_owner` | `[server] owner` |
 | `qlx_plugins` | `[server] plugins` |
-| `qlx_pluginsPath` | dropped (plugins live in `minqlx/plugins/`; override with `MINQLX_PLUGINS_DIR`) |
+| `qlx_pluginsPath` | dropped (plugins live in `verge/plugins/`; override with `VERGE_PLUGINS_DIR`) |
 | `qlx_database` | dropped (always SQLite) |
 | `qlx_redisAddress` / `qlx_redisDatabase` / `qlx_redisUnixSocket` / `qlx_redisPassword` | dropped (Redis removed; see `tools/migrate-redis.ts`) |
 | `qlx_commandPrefix` | `[server] command_prefix` |

@@ -27,11 +27,11 @@
 *.out
 *.app
 
-bin/minqlx.zip
+bin/verge.zip
 
 # TS runtime
 node_modules/
-bin/minqlx/
+bin/verge/
 *.db
 *.sock
-minqlx-trace*.jsonl
+verge-trace*.jsonl

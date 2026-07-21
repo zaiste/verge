@@ -2,14 +2,14 @@
  * motd - message of the day (port of motd.py).
  *
  * Shows (and sounds) the MOTD to players shortly after they load. The MOTD
- * itself lives in the db under "minqlx:motd"; literal "\n" sequences in it
+ * itself lives in the db under "verge:motd"; literal "\n" sequences in it
  * split it into multiple lines, like the original.
  */
 import type { Plugin } from "../runtime/src/plugin";
 import type { Player } from "../runtime/src/players";
 import { EventResult, Priority } from "../runtime/src/constants";
 
-const MOTD_KEY = "minqlx:motd";
+const MOTD_KEY = "verge:motd";
 /** Was qlx_motdSound. */
 const DEFAULT_SOUND = "sound/vo/crash_new/37b_07_alt.wav";
 /** Was qlx_motdHeader. */

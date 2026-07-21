@@ -11,7 +11,7 @@
  * Techniques:
  * - console_command("addbot ...") creates real client entities
  * - the client_command RPC injects chat/votes as if a client typed them
- * - console_command("qlx ...") round-trips the rcon/owner command path
+ * - console_command("verge ...") round-trips the rcon/owner command path
  */
 import type { Plugin, PluginContext } from "../runtime/src/plugin";
 import type { Player } from "../runtime/src/players";
@@ -106,7 +106,7 @@ class Smoke {
     // reply text as an event — every assertion below is on game/db state.
 
     // --- rcon path: owner-level !setperm must land in the database ---
-    await ctx.engine.rpc("console_command", `qlx !setperm ${bot.id} 2`);
+    await ctx.engine.rpc("console_command", `verge !setperm ${bot.id} 2`);
     const perm = await this.until(
       () => (ctx.db.getPermission(bot.steamId) === 2 ? true : undefined),
       3000,
@@ -115,7 +115,7 @@ class Smoke {
 
     // --- rcon !slap: observable as a health drop ---
     const before = (await bot.state())?.health ?? 0;
-    await ctx.engine.rpc("console_command", `qlx !slap ${bot.id} 30`);
+    await ctx.engine.rpc("console_command", `verge !slap ${bot.id} 30`);
     let after = before;
     const slapDeadline = Date.now() + 3000;
     while (Date.now() < slapDeadline) {
@@ -164,7 +164,7 @@ class Smoke {
     await this.report("death event from ZMQ stats", died !== null, `deaths=${deaths.length}`);
 
     // --- moderation: owner kick via rcon actually removes the client ---
-    await ctx.engine.rpc("console_command", `qlx !kick ${other.id}`);
+    await ctx.engine.rpc("console_command", `verge !kick ${other.id}`);
     const kicked = await this.until(() => (ctx.player(other.id) === null ? true : undefined), 5000);
     await this.report("rcon !kick removed bot", kicked === true);
 

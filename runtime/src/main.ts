@@ -4,7 +4,7 @@ import { loadConfig } from "./config";
 import { Runtime } from "./runtime";
 import { log } from "./util";
 
-const socketPath = process.env.MINQLX_SOCKET ?? "minqlx.sock";
+const socketPath = process.env.VERGE_SOCKET ?? "verge.sock";
 
 const config = await loadConfig();
 const engine = new SocketEngine(socketPath);

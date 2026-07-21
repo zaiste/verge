@@ -1,10 +1,10 @@
 # Shim ↔ Sidecar Protocol
 
-The C shim inside `minqlx.x64.so` talks to the Bun sidecar over a Unix
+The C shim inside `verge.x64.so` talks to the Bun sidecar over a Unix
 domain socket using newline-delimited JSON (UTF-8; invalid engine bytes are
-lossily replaced). The shim listens on `$MINQLX_SOCKET` (default
-`minqlx.sock` in the server directory) and supervises the sidecar
-(`bun minqlx/main.js`). Kill the sidecar and the server keeps running as
+lossily replaced). The shim listens on `$VERGE_SOCKET` (default
+`verge.sock` in the server directory) and supervises the sidecar
+(`bun verge/main.js`). Kill the sidecar and the server keeps running as
 vanilla QLDS; it is respawned with exponential backoff (1s → 30s).
 
 Supervision does not depend on engine frames (an idle QLDS stops running
@@ -49,7 +49,7 @@ Everything else is fire-and-forget. `set_configstring` is only dispatched
 when the value actually changes (the engine re-sets some indexes with
 identical values every frame).
 
-The wait is bounded by `MINQLX_HOOK_TIMEOUT_MS` (default 100 ms); on
+The wait is bounded by `VERGE_HOOK_TIMEOUT_MS` (default 100 ms); on
 timeout the engine proceeds as if the hook returned pass-through, and the
 late reply is dropped. While waiting, the shim executes incoming
 **read-only** `rpc` messages (`player_info`, `get_cvar`, ...) — that's
@@ -85,6 +85,6 @@ is always a **string** on the wire and in the runtime.
 
 ## Tracing
 
-Set `MINQLX_TRACE=/path/to/session.jsonl` and the shim tees every
+Set `VERGE_TRACE=/path/to/session.jsonl` and the shim tees every
 protocol line (with direction) to that file — useful for replaying real
 sessions in tests.

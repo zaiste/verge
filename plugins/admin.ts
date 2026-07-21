@@ -16,11 +16,11 @@
  *   "<id> <length> seconds|minutes|hours|days|weeks|months|years [reason]");
  *   essentials' old "tempban until the map ends" lives on as !kickban.
  * - Bans and silences are single kv records with a ttl instead of Redis zsets:
- *   minqlx:players:<steamId>:ban and :silence. Leaver counts (games_completed/
+ *   verge:players:<steamId>:ban and :silence. Leaver counts (games_completed/
  *   games_left) and last_seen keep their original key names.
  * - !ban/!silence/!unban/!unsilence also act on a *connected* player when given
  *   a SteamID64 (Python only kicked/muted when given a client id).
- * - Config ([plugin.admin] in minqlx.toml) replaces the qlx_* cvars:
+ * - Config ([plugin.admin] in verge.toml) replaces the qlx_* cvars:
  *     vote_pass            (qlx_votepass, default true)
  *     vote_pass_threshold  (qlx_votepassThreshold, default 0.33)
  *     vote_pass_delay      (seconds before a winning vote is forced, default 29)
@@ -40,7 +40,7 @@ import type { SteamId } from "../runtime/src/protocol";
 import { EventResult, PRIV_ADMIN, PRIV_MOD, PRIV_NONE, Priority } from "../runtime/src/constants";
 import { cleanText } from "../runtime/src/util";
 
-const playerKey = (sid: SteamId) => `minqlx:players:${sid}`;
+const playerKey = (sid: SteamId) => `verge:players:${sid}`;
 const banKey = (sid: SteamId) => `${playerKey(sid)}:ban`;
 const silenceKey = (sid: SteamId) => `${playerKey(sid)}:silence`;
 
@@ -864,7 +864,7 @@ export default {
       }
 
       const name = arg === ctx.owner ? "my ^6master^7" : "that player";
-      const stored = ctx.db.get(`minqlx:players:${arg}:last_seen`);
+      const stored = ctx.db.get(`verge:players:${arg}:last_seen`);
       const then = stored ? parseDate(stored) : null;
       if (!then) return channel.reply(`^7I have never seen ${name} before.`);
 

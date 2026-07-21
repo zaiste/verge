@@ -12,12 +12,12 @@ scripting stack; the battle-tested C hooking core is inherited from it.
 ## How it works
 
 ```
-qzeroded.x64  ←LD_PRELOAD─  minqlx.x64.so (C shim)
+qzeroded.x64  ←LD_PRELOAD─  verge.x64.so (C shim)
                                  │  unix socket, JSON lines
                                  ▼
                             bun (sidecar) ── runtime + plugins (TypeScript)
                                  │
-                            minqlx.db (SQLite)
+                            verge.db (SQLite)
 ```
 
 The `.so` inline-hooks the closed-source server binary and forwards engine
@@ -37,11 +37,11 @@ curl -fsSL https://raw.githubusercontent.com/zaiste/verge/main/tools/install.sh 
 ```
 
 That unpacks the shim, a `bun` binary, the bundled runtime and plugins,
-and writes `minqlx.toml` (it asks for your SteamID64 — you're the owner).
+and writes `verge.toml` (it asks for your SteamID64 — you're the owner).
 Launch:
 
 ```sh
-./minqlx-run.sh +set net_port 27960 +exec server.cfg
+./verge-run.sh +set net_port 27960 +exec server.cfg
 ```
 
 ### From source
@@ -50,24 +50,24 @@ Launch:
 git clone https://github.com/zaiste/verge && cd verge
 make so                                # needs only gcc + libc
 cd runtime && bun install && bun run bundle && cd ..
-cp bin/minqlx.x64.so tools/minqlx-run.sh minqlx.toml.example /path/to/qlds/
-cp -r bin/minqlx /path/to/qlds/minqlx
+cp bin/verge.x64.so tools/verge-run.sh verge.toml.example /path/to/qlds/
+cp -r bin/verge /path/to/qlds/verge
 ```
 
 On non-Linux hosts: `make CC="zig cc -target x86_64-linux-gnu" so`.
 
 ## Use
 
-Configuration lives in one file, [`minqlx.toml`](minqlx.toml.example):
-owner, plugin list, per-plugin settings. Env vars (`MINQLX_*`) override.
+Configuration lives in one file, [`verge.toml`](verge.toml.example):
+owner, plugin list, per-plugin settings. Env vars (`VERGE_*`) override.
 Coming from Python-era `qlx_*` cvars? See the
 [mapping table](docs/config.md). Migrating a Redis database:
-`bun tools/migrate-redis.ts redis://localhost:6379 minqlx.db`.
+`bun tools/migrate-redis.ts redis://localhost:6379 verge.db`.
 
 In-game, commands start with `!` (permission levels 0–5, owner is 5):
 `!kick`, `!ban 3 2 weeks flaming`, `!mute`, `!setperm`, `!teams`,
-`!map`, ... — `!help` lists them. From the server console, `qlx !cmd`
-runs any command as owner; `qlxrestart` restarts the sidecar.
+`!map`, ... — `!help` lists them. From the server console, `verge !cmd`
+runs any command as owner; `vergerestart` restarts the sidecar.
 
 Bundled plugins, the classic set consolidated:
 
@@ -85,7 +85,7 @@ at runtime with `!load` / `!unload` / `!reload <plugin>`.
 
 ## Write a plugin
 
-Drop a file in `minqlx/plugins/` and add it to the config:
+Drop a file in `verge/plugins/` and add it to the config:
 
 ```ts
 import type { Plugin } from "../runtime/src/plugin";
@@ -120,9 +120,9 @@ bun test                     # no QLDS needed
 cd runtime && bun run typecheck
 ```
 
-Against a real server: launch with `MINQLX_NO_SPAWN=1` and run
+Against a real server: launch with `VERGE_NO_SPAWN=1` and run
 `bun --watch runtime/src/main.ts` — the runtime reconnects on every edit.
-`MINQLX_TRACE=session.jsonl` records all shim↔sidecar traffic. A
+`VERGE_TRACE=session.jsonl` records all shim↔sidecar traffic. A
 bot-driven end-to-end scenario ships as the `smoketest` plugin.
 
 ## License

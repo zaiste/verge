@@ -5,7 +5,7 @@
  * flags, bans, mutes, clan tags), preserving TTLs.
  *
  *   bun tools/migrate-redis.ts [redis-url] [sqlite-path]
- *   e.g. bun tools/migrate-redis.ts redis://localhost:6379/0 minqlx.db
+ *   e.g. bun tools/migrate-redis.ts redis://localhost:6379/0 verge.db
  *
  * Non-string types (sets/zsets used by some third-party plugins) are
  * reported but not migrated.
@@ -14,7 +14,7 @@ import { RedisClient } from "bun";
 import { Db } from "../runtime/src/db";
 
 const redisUrl = process.argv[2] ?? "redis://localhost:6379";
-const sqlitePath = process.argv[3] ?? "minqlx.db";
+const sqlitePath = process.argv[3] ?? "verge.db";
 
 const redis = new RedisClient(redisUrl);
 const db = new Db(sqlitePath, "");
@@ -38,7 +38,9 @@ do {
     const value = await redis.get(key);
     if (value === null) continue;
     const pttl = (await redis.send("PTTL", [key])) as number;
-    db.set(key, value, pttl > 0 ? { ttl: Math.ceil(pttl / 1000) } : undefined);
+    // The kv scheme is otherwise unchanged; only the namespace is renamed.
+    const target = `verge:${key.slice("minqlx:".length)}`;
+    db.set(target, value, pttl > 0 ? { ttl: Math.ceil(pttl / 1000) } : undefined);
     migrated++;
   }
 } while (cursor !== "0");

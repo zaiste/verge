@@ -41,7 +41,7 @@ export class Runtime {
   constructor(
     readonly engine: Engine,
     readonly config: Config,
-    private pluginsDir = process.env.MINQLX_PLUGINS_DIR ??
+    private pluginsDir = process.env.VERGE_PLUGINS_DIR ??
       path.join(path.dirname(Bun.main), "plugins"),
   ) {
     this.db = new Db(config.server.database, config.server.owner);

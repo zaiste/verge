@@ -79,5 +79,5 @@ void __cdecl Slay(void) {
         Com_Printf("The player is currently not active.\n");
 }
 
-// The qlx/qlxrestart console commands live in shim/shim_dispatch.c as
+// The verge/vergerestart console commands live in shim/shim_dispatch.c as
 // ShimRcon/ShimCommand/ShimRestart.

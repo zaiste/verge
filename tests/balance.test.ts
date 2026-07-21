@@ -266,7 +266,7 @@ describe("balance: local rating overrides", () => {
     await server.chat(owner.info.clientId, `!setrating ${player.info.clientId} 1234`);
     let sent = server.messagesTo(null).join("\n");
     expect(sent).toContain("Anarki's CA rating has been set to ^61234^7.");
-    expect(server.runtime.db.get(`minqlx:players:${player.info.steamId}:ratings:ca`)).toBe("1234");
+    expect(server.runtime.db.get(`verge:players:${player.info.steamId}:ratings:ca`)).toBe("1234");
 
     server.engine.clearCalls();
     await server.chat(player.info.clientId, "!elo");
@@ -285,7 +285,7 @@ describe("balance: local rating overrides", () => {
 
     const sent = server.messagesTo(null).join("\n");
     expect(sent).toContain("Anarki's locally set CA rating has been deleted.");
-    expect(server.runtime.db.get(`minqlx:players:${player.info.steamId}:ratings:ca`)).toBeNull();
+    expect(server.runtime.db.get(`verge:players:${player.info.steamId}:ratings:ca`)).toBeNull();
   });
 });
 

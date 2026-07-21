@@ -1,15 +1,15 @@
-# minqlx configuration. Copy to minqlx.toml next to qzeroded.x64 and edit.
-# Environment overrides: MINQLX_OWNER, MINQLX_PLUGINS, MINQLX_DATABASE.
+# verge configuration. Copy to verge.toml next to qzeroded.x64 and edit.
+# Environment overrides: VERGE_OWNER, VERGE_PLUGINS, VERGE_DATABASE.
 
 [server]
 # SteamID64 of the server owner (gets permission level 5). MANDATORY.
 owner = "76561198000000000"
-# Plugins to load from the minqlx/plugins directory.
+# Plugins to load from the verge/plugins directory.
 plugins = ["admin", "identity", "motd", "log", "balance", "fun"]
 # Prefix for chat commands.
 command_prefix = "!"
 # SQLite database file (bans, permissions, mutes, clan tags, ...).
-database = "minqlx.db"
+database = "verge.db"
 
 [stats]
 # Listen to QLDS's ZMQ stats feed (kill/death/round/game events).

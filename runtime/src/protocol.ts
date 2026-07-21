@@ -1,5 +1,5 @@
 /**
- * Wire protocol between the C shim (inside minqlx.x64.so) and this sidecar.
+ * Wire protocol between the C shim (inside verge.x64.so) and this sidecar.
  * Transport: Unix domain socket, newline-delimited JSON, UTF-8 (invalid engine
  * bytes are lossily replaced on decode).
  *
