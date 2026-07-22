@@ -54,4 +54,8 @@ returns keep their meaning: `false` cancels, a string replaces.
 `qlx_*` cvars → `verge.toml`, mapped row by row in
 [config.md](config.md). An existing Redis database imports with
 `bun tools/migrate-redis.ts <redis-url> verge.db`, which rewrites the
-`minqlx:` key prefix to `verge:` and preserves TTLs.
+`minqlx:` key prefix to `verge:` and preserves TTLs. Bans and silences
+change shape: ban.py/silence.py stored a zset of ids plus a hash per id,
+verge stores one JSON record with a TTL — the migrator converts the
+longest still-active entry per player and drops expired history. Other
+non-string keys (third-party plugin data) are reported, not migrated.

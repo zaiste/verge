@@ -21,6 +21,14 @@ expect(server.messagesTo(null).join("")).toContain("banned");
 through the same parsing, command dispatch, and permission checks it
 would on a live server. The database is an in-memory SQLite.
 
+The testkit substitutes for the socket transport, so `SocketEngine` has
+its own suite (`tests/transport.test.ts`) against a fake shim on a real
+unix socket: NDJSON reframing, UTF-8 split across reads, backpressure
+ordering, hello-first framing, RPC timeouts, and the hook reply paths
+(throw, hang, deadline). `tests/stats.test.ts`, `tests/zmtp.test.ts`
+(NULL + PLAIN handshakes, error → reconnect) and `tests/config.test.ts`
+cover the stats feed and the TOML loader.
+
 ```sh
 bun test                       # everything
 bun test tests/admin.test.ts   # one file
@@ -32,7 +40,10 @@ cd runtime && bun run typecheck
 `tests/shim/harness.c` links the real `shim/shim_ipc.c` into a test binary,
 stubs the engine side, and talks to a real Bun sidecar
 (`tests/shim/echo-sidecar.ts`). It covers the sidecar handshake, event
-delivery, blocking hooks, and re-entrancy.
+delivery, blocking hooks, re-entrancy, parked-RPC drain order, the hook
+timeout path (unanswered hook → pass-through, stale reply dropped),
+sidecar death mid-hook-wait followed by a broker respawn, and the
+oversized-line drop.
 
 The re-entrancy scenario is a regression test for the bug that segfaulted
 a live server: an RPC that dispatches a hook while further RPCs are already
@@ -50,9 +61,15 @@ release loadable there:
 
 - `tools/build-shim.sh` pins the glibc floor (2.17) with `zig cc` and fails
   if a symbol creeps above it.
-- CI dlopens the built library with `RTLD_NOW` inside `debian:10`,
-  `debian:11`, `ubuntu:20.04` and `rockylinux:8`, which is what the dynamic
-  linker does when QLDS starts with it preloaded.
+- CI dlopens the built library with `RTLD_NOW` inside `centos:7` (glibc
+  2.17 — the floor itself), `debian:10`, `debian:11`, `ubuntu:20.04` and
+  `rockylinux:8`, which is what the dynamic linker does when QLDS starts
+  with it preloaded.
+
+The release workflow repeats the load matrix against the *packaged*
+`verge.x64.so` and additionally boots the packaged runtime under the
+packaged bun until it sends a valid `hello`
+(`tests/release-smoke.ts`) — nothing publishes unless every gate passes.
 
 The floor check says what the library asks for; the load test says whether
 a given glibc can provide it. Both matter: a library built on glibc 2.39

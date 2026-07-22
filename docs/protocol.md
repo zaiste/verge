@@ -55,6 +55,19 @@ late reply is dropped. While waiting, the shim executes incoming
 **read-only** `rpc` messages (`player_info`, `get_cvar`, ...) — that's
 what lets a hook handler look up state before answering.
 
+The sidecar has fault backstops of its own: an RPC whose `rpcres` never
+arrives rejects after `VERGE_RPC_TIMEOUT_MS` (default 5 s), and a hook
+handler that never settles gets a pass-through `hookres` sent on its
+behalf after `VERGE_HOOK_DEADLINE_MS` (default 5 s) — the engine moved on
+at its own timeout long before; this bounds sidecar state and surfaces
+the hung handler in the log.
+
+The shim protects the engine with hard ceilings rather than throttling:
+more than 256 parked mutating RPCs in flight, more than 512 KiB of
+pending output, or a single line over 1 MiB drop the connection (the
+sidecar exits and is respawned). A healthy plugin set stays orders of
+magnitude below all three.
+
 ## Threading model
 
 The engine is single-threaded and its functions are not re-entrant:

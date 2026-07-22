@@ -75,22 +75,40 @@ not sufficient — `Player.isBot` also checks the `skill` userinfo key.
 flushes on `drain`; ignoring the return value corrupts NDJSON framing
 under load.
 
+**A `Player` names a client slot, not a person.** After a disconnect the
+slot is reused, so a held `Player` can act on whoever occupies the id
+now. Act on one synchronously, or re-check
+`ctx.player(p.id)?.steamId === p.steamId` after any await/delay (see
+motd's delayed send and admin's leaver warning).
+
+**Hooks and RPCs have fault backstops, not guarantees.** A lost `rpcres`
+rejects after `VERGE_RPC_TIMEOUT_MS` (5 s); a hook handler that never
+settles gets `res: null` sent for it after `VERGE_HOOK_DEADLINE_MS`
+(5 s). The shim drops the connection outright at its ceilings (256
+parked mutating RPCs, 512 KiB pending output, 1 MiB line).
+
 ## Compatibility
 
 Release artifacts must keep loading on old server distributions. The
 glibc floor (2.17) is pinned by `tools/build-shim.sh` rather than
 inherited from the build host, and CI dlopens the result on images down
-to glibc 2.28. Building on a modern image without pinning silently
-produces a library that needs `GLIBC_2.34`. The bundled `bun` is the
-baseline build for the same reason: the default one needs AVX2.
+to glibc 2.17 (`centos:7`, the floor itself). Building on a modern image
+without pinning silently produces a library that needs `GLIBC_2.34`. The
+bundled `bun` is the baseline build for the same reason: the default one
+needs AVX2.
 
 ## Releasing
 
 Push a `v*` tag: `.github/workflows/release.yml` builds the tarball with
-`tools/package-release.sh` and attaches it to the release, creating one
-if it does not exist so notes can be written by hand first. `install.sh`
-is served from `main`, so installer fixes ship without a new release.
-Actions are pinned by commit SHA with the version in a trailing comment.
+`tools/package-release.sh`, gates it (shim harness, runtime tests, the
+packaged `.so` dlopened on the old-glibc matrix, the packaged runtime
+booted to `hello` via `tests/release-smoke.ts`), and only then attaches
+tarball + `SHA256SUMS` to the release, creating one if it does not exist
+so notes can be written by hand first. `install.sh` is served from
+`main`, so installer fixes ship without a new release; it verifies the
+checksum and stages the unpack so a failed download can't half-update a
+live install. Actions are pinned by commit SHA with the version in a
+trailing comment.
 
 ## Conventions
 
@@ -124,3 +142,5 @@ load, kill/respawn of the sidecar, and the ZMQ stats feed.
 - `VERGE_TRACE` recordings exist but nothing replays them yet.
 - The engine-facing half of the shim (`core/`) has no automated tests,
   and its pattern offsets target specific QLDS builds.
+- `console_print` subscribers can cancel but not replace output — the
+  engine prints the original buffer regardless of a string result.

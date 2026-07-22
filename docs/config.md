@@ -11,6 +11,11 @@ Shim-level (engine side) settings are environment variables only, set
 before launching the server: `VERGE_SOCKET`, `VERGE_BUN`, `VERGE_ENTRY`,
 `VERGE_HOOK_TIMEOUT_MS`, `VERGE_NO_SPAWN`, `VERGE_TRACE`.
 
+Sidecar fault backstops (rarely need touching): `VERGE_RPC_TIMEOUT_MS`
+(default 5000; reject an RPC whose reply never comes) and
+`VERGE_HOOK_DEADLINE_MS` (default 5000; reply pass-through for a hook
+handler that never settles).
+
 ## qlx_* cvar → verge.toml mapping
 
 | Old cvar | New setting |

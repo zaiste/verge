@@ -132,8 +132,9 @@ cd runtime && bun run typecheck
 ```
 
 A bot-driven end-to-end scenario ships as the `smoketest` plugin, and CI
-checks that the release actually loads on distributions as old as glibc
-2.28. See [docs/testing.md](docs/testing.md) for all four levels.
+checks that the release actually loads on distributions down to glibc
+2.17, the pinned floor. See [docs/testing.md](docs/testing.md) for all
+four levels.
 
 Against a real server: launch with `VERGE_NO_SPAWN=1` and run
 `bun --watch runtime/src/main.ts` — the runtime reconnects on every edit.
