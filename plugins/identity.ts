@@ -43,9 +43,10 @@ export default {
 
     /** Clean Steam names, keyed by SteamID64. */
     const steamNames = new Map<string, string>();
-    /** Set when we changed the name ourselves, so the resulting userinfo
-     * event doesn't treat it as a manual rename. */
-    let nameSet = false;
+    /** SteamIDs whose name we changed ourselves, so the resulting userinfo
+     * event isn't treated as a manual rename. Keyed per player: two players'
+     * userinfo changes can interleave before our own echo comes back. */
+    const nameSet = new Set<string>();
 
     /** Rewrites the player's userinfo with a new name (the same mechanism
      * Python's Player.name setter used). */
@@ -63,13 +64,14 @@ export default {
       const stored = ctx.db.get(nameKey(player.steamId));
       if (stored === null) return;
       if (!enforce || cleanText(stored).toLowerCase() === player.cleanName.toLowerCase()) {
-        nameSet = true;
+        nameSet.add(player.steamId);
         await setName(player, stored);
       }
     });
 
     ctx.on("player_disconnect", (player) => {
       steamNames.delete(player.steamId);
+      nameSet.delete(player.steamId);
     });
 
     ctx.on("userinfo", async (player, changed) => {
@@ -83,8 +85,8 @@ export default {
       }
 
       // Registered name handling. Skip once if our own setName caused this.
-      if (nameSet) {
-        nameSet = false;
+      if (nameSet.delete(player.steamId)) {
+        // our own write echoing back; not a manual rename
       } else if (changed.has("name")) {
         const key = nameKey(player.steamId);
         const stored = ctx.db.get(key);
@@ -130,7 +132,7 @@ export default {
         return EventResult.StopAll;
       }
 
-      nameSet = true;
+      nameSet.add(player.steamId);
       name = "^7" + name;
       await setName(player, name);
       ctx.db.set(key, name);
