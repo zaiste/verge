@@ -132,28 +132,35 @@ describe("zmtp", () => {
       return buf;
     }
 
-    const server = Bun.listen<{ stage: number }>({
+    // Buffer across reads: on a loaded runner the client's 64-byte greeting
+    // and its HELLO frame can coalesce into one chunk.
+    const server = Bun.listen<{ buf: number[]; greeted: boolean }>({
       hostname: "127.0.0.1",
       port: 0,
       socket: {
         open(s) {
-          s.data = { stage: 0 };
+          s.data = { buf: [], greeted: false };
           s.write(plainGreeting());
         },
         data(s, chunk) {
-          if (s.data.stage === 0 && chunk.length >= 64) {
-            s.data.stage = 1; // client greeting consumed; HELLO follows
-            return;
+          s.data.buf.push(...chunk);
+          if (!s.data.greeted) {
+            if (s.data.buf.length < 64) return;
+            s.data.buf.splice(0, 64); // client greeting consumed
+            s.data.greeted = true;
           }
           // Frames from the client: HELLO, INITIATE, then the subscription.
-          const text = new TextDecoder().decode(chunk);
+          const text = new TextDecoder().decode(new Uint8Array(s.data.buf));
           if (text.includes("HELLO")) {
+            s.data.buf.length = 0;
             commandsSeen.push("HELLO");
             s.write(command("WELCOME"));
           } else if (text.includes("INITIATE")) {
+            s.data.buf.length = 0;
             commandsSeen.push("INITIATE");
             s.write(readyCommand());
-          } else if (chunk.includes(0x01)) {
+          } else if (s.data.buf.includes(0x01)) {
+            s.data.buf.length = 0;
             s.write(shortMessage('{"TYPE":"PLAINOK"}'));
           }
         },
