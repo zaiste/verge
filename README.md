@@ -113,7 +113,9 @@ The full API is typed: [`runtime/src/plugin.ts`](runtime/src/plugin.ts)
 
 ## Test without a game server
 
-The runtime is plain Bun code; the testkit fakes the engine in-process:
+The runtime is plain Bun code; the testkit implements the same engine
+interface in-process, so plugins run in the production runtime with the
+engine faked underneath:
 
 ```ts
 const server = await createTestServer({ plugins: ["admin"] });
@@ -122,14 +124,18 @@ await server.chat(info.clientId, "!ban 0 1 day spam");
 ```
 
 ```sh
-bun test                     # no QLDS needed
+bun test                     # plugins and runtime, no QLDS needed
+make check-shim              # the C IPC layer against a real sidecar
 cd runtime && bun run typecheck
 ```
 
+A bot-driven end-to-end scenario ships as the `smoketest` plugin, and CI
+checks that the release actually loads on distributions as old as glibc
+2.28. See [docs/testing.md](docs/testing.md) for all four levels.
+
 Against a real server: launch with `VERGE_NO_SPAWN=1` and run
 `bun --watch runtime/src/main.ts` — the runtime reconnects on every edit.
-`VERGE_TRACE=session.jsonl` records all shim↔sidecar traffic. A
-bot-driven end-to-end scenario ships as the `smoketest` plugin.
+`VERGE_TRACE=session.jsonl` records all shim↔sidecar traffic.
 
 ## License
 
