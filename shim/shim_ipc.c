@@ -528,8 +528,14 @@ static int read_and_process(void) {
                 return processed;
             }
             if (shim.in_len + n > shim.in_cap) {
-                shim.in_cap = (shim.in_len + n) * 2;
-                shim.in_buf = realloc(shim.in_buf, shim.in_cap);
+                size_t new_cap = (shim.in_len + n) * 2;
+                char* grown = realloc(shim.in_buf, new_cap);
+                if (!grown) {
+                    drop_connection("out of memory growing read buffer");
+                    return processed;
+                }
+                shim.in_buf = grown;
+                shim.in_cap = new_cap;
             }
             memcpy(shim.in_buf + shim.in_len, chunk, n);
             shim.in_len += n;
@@ -743,15 +749,23 @@ void Shim_Initialize(void) {
             DebugPrint("Could not open trace file %s: %s\n", env, strerror(errno));
     }
 
-    shim.out_buf = malloc(OUT_BUF_SIZE);
-    shim.in_cap = 65536;
-    shim.in_buf = malloc(shim.in_cap);
-
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
     pthread_mutex_init(&shim.lock, &attr);
     shim.main_thread = pthread_self();
+
+    shim.out_buf = malloc(OUT_BUF_SIZE);
+    shim.in_cap = 65536;
+    shim.in_buf = malloc(shim.in_cap);
+    if (!shim.out_buf || !shim.in_buf) {
+        DebugPrint("Out of memory allocating IO buffers. Running without sidecar.\n");
+        free(shim.out_buf);
+        free(shim.in_buf);
+        shim.out_buf = NULL;
+        shim.in_buf = NULL;
+        return;
+    }
 
     // The server's stdout is usually a log file; line-buffer it so shim
     // diagnostics (sidecar exits, respawns, timeouts) appear promptly.
@@ -824,6 +838,15 @@ void Shim_Shutdown(void) {
     }
     unlink(shim.socket_path);
     pthread_mutex_unlock(&shim.lock);
+}
+
+// Runs at engine process exit. The broker child always leaves via _exit,
+// so this never fires there. socket_path is empty iff Shim_Initialize
+// never ran (e.g. preloaded into a process that isn't qzeroded).
+__attribute__((destructor))
+static void shim_atexit(void) {
+    if (shim.socket_path[0])
+        Shim_Shutdown();
 }
 
 /*
