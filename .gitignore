@@ -38,3 +38,6 @@ verge-trace*.jsonl
 
 # Release artifacts
 verge-*.tar.gz
+bin/shim-harness
+bin/load_test
+SHA256SUMS
