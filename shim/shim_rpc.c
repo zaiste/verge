@@ -51,7 +51,7 @@ static int get_client_id(const cJSON* args, int idx, int* out, const char** err)
         return 0;
     }
     if (*out < 0 || *out >= sv_maxclients->integer) {
-        *err = errf("client_id needs to be a number from 0 to %d.", sv_maxclients->integer, 0);
+        *err = errf("client_id needs to be a number from 0 to %d.", sv_maxclients->integer - 1, 0);
         return 0;
     }
     return 1;
@@ -336,8 +336,8 @@ static cJSON* rpc_add_console_command(const cJSON* args, const char** err) {
 static cJSON* rpc_get_configstring(const cJSON* args, const char** err) {
     int i;
     char csbuffer[4096];
-    if (!arg_int(args, 0, &i) || i < 0 || i > MAX_CONFIGSTRINGS) {
-        *err = errf("index needs to be a number from 0 to %d.", MAX_CONFIGSTRINGS, 0);
+    if (!arg_int(args, 0, &i) || i < 0 || i >= MAX_CONFIGSTRINGS) {
+        *err = errf("index needs to be a number from 0 to %d.", MAX_CONFIGSTRINGS - 1, 0);
         return NULL;
     }
     SV_GetConfigstring(i, csbuffer, sizeof(csbuffer));
@@ -347,8 +347,8 @@ static cJSON* rpc_get_configstring(const cJSON* args, const char** err) {
 static cJSON* rpc_set_configstring(const cJSON* args, const char** err) {
     int i;
     const char* cs = arg_str(args, 1);
-    if (!arg_int(args, 0, &i) || i < 0 || i > MAX_CONFIGSTRINGS) {
-        *err = errf("index needs to be a number from 0 to %d.", MAX_CONFIGSTRINGS, 0);
+    if (!arg_int(args, 0, &i) || i < 0 || i >= MAX_CONFIGSTRINGS) {
+        *err = errf("index needs to be a number from 0 to %d.", MAX_CONFIGSTRINGS - 1, 0);
         return NULL;
     }
     if (!cs) {
