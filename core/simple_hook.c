@@ -5,15 +5,19 @@
 #include <stdint.h>
 #include "trampoline.h"
 
+// WORST_CASE is the pool stride per trampoline and must be at least
+// MEMORY_SLOT_SIZE from trampoline.c: CreateTrampolineFunction may emit up
+// to TRAMPOLINE_MAX_SIZE bytes plus (on x64) a trailing relay JMP_ABS,
+// i.e. a full MEMORY_SLOT_SIZE. A smaller stride overruns into the next slot.
 #if defined(__x86_64__) || defined(_M_X64)
 typedef uint64_t pint;
 typedef int64_t sint;
-#define WORST_CASE 			42
+#define WORST_CASE 			64
 #define JUMP_SIZE 			sizeof(JMP_ABS)
 #elif defined(__i386) || defined(_M_IX86)
 typedef uint32_t pint;
 typedef int32_t sint;
-#define WORST_CASE 			29
+#define WORST_CASE 			32
 #define JUMP_SIZE 			sizeof(JMP_REL)
 #endif
 
