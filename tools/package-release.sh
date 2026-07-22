@@ -37,10 +37,18 @@ cp -r bin/verge "$STAGE/pkg/verge"
 cp "$STAGE/bun" "$STAGE/pkg/bun"
 cp verge.toml.example "$STAGE/pkg/"
 cp tools/verge-run.sh "$STAGE/pkg/"
+cp LICENSE README.md "$STAGE/pkg/"
 chmod +x "$STAGE/pkg/bun" "$STAGE/pkg/verge-run.sh"
 
 OUT="verge-${VERSION}-linux-x64.tar.gz"
 # --no-xattrs: macOS tar otherwise embeds provenance attributes that make
 # GNU tar warn on every entry at extraction time.
 tar --no-xattrs -czf "$OUT" -C "$STAGE/pkg" .
+
+# Checksums, published alongside the tarball and verified by install.sh.
+if command -v sha256sum >/dev/null; then
+  sha256sum "$OUT" > SHA256SUMS
+else
+  shasum -a 256 "$OUT" > SHA256SUMS
+fi
 echo "Wrote $OUT"
