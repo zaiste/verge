@@ -28,10 +28,22 @@ export interface Engine {
   start(subs: RawEventName[], frameEvery?: number): Promise<void>;
 }
 
+/** Fault backstops. The shim answers read-only RPCs inline and mutating ones
+ * on the next frame (~25 ms), so a reply that takes seconds means the frame
+ * or the connection is gone — reject rather than hang the caller forever.
+ * Likewise a hook handler that never settles would leak and force the engine
+ * to burn its full hook timeout on every dispatch; past the deadline we reply
+ * pass-through on its behalf. */
+const RPC_TIMEOUT_MS = Number(process.env.VERGE_RPC_TIMEOUT_MS ?? "") || 5000;
+const HOOK_DEADLINE_MS = Number(process.env.VERGE_HOOK_DEADLINE_MS ?? "") || 5000;
+
 export class SocketEngine implements Engine {
   private sock: Bun.Socket<undefined> | null = null;
   private nextRpcId = 1;
-  private pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+  private pending = new Map<
+    number,
+    { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
+  >();
   private handlers = new Map<RawEventName, RawHandler>();
   private buffer = "";
   private decoder = new TextDecoder(); // lossy on invalid engine bytes, by design
@@ -40,7 +52,12 @@ export class SocketEngine implements Engine {
    * honoring backpressure would corrupt the NDJSON framing under load. */
   private outbox: Uint8Array | null = null;
 
-  constructor(private socketPath: string) {}
+  constructor(
+    private socketPath: string,
+    /** Called when the shim connection ends; production exits so the shim
+     * can respawn us, tests inject a no-op. */
+    private onDisconnect: (code: number) => void = (code) => process.exit(code),
+  ) {}
 
   rpc<K extends RpcName>(
     fn: K,
@@ -49,7 +66,11 @@ export class SocketEngine implements Engine {
     const id = this.nextRpcId++;
     this.send({ t: "rpc", id, fn, args });
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`rpc '${fn}' timed out after ${RPC_TIMEOUT_MS} ms`));
+      }, RPC_TIMEOUT_MS);
+      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
     });
   }
 
@@ -63,7 +84,20 @@ export class SocketEngine implements Engine {
       socket: {
         open: (s) => {
           this.sock = s;
-          this.send({ t: "hello", v: 1, subs, frameEvery });
+          // hello must be the first frame on the wire; a plugin may have
+          // issued RPCs during setup() that are already in the outbox.
+          const hello = this.encoder.encode(
+            JSON.stringify({ t: "hello", v: 1, subs, frameEvery }) + "\n",
+          );
+          if (this.outbox) {
+            const merged = new Uint8Array(hello.length + this.outbox.length);
+            merged.set(hello);
+            merged.set(this.outbox, hello.length);
+            this.outbox = merged;
+          } else {
+            this.outbox = hello;
+          }
+          this.flush();
           log.info(`connected to engine at ${this.socketPath}`);
         },
         data: (_s, chunk) => this.onData(chunk),
@@ -71,11 +105,11 @@ export class SocketEngine implements Engine {
         close: () => {
           // The shim owns our lifecycle: if the socket goes, so do we.
           log.info("engine socket closed, exiting.");
-          process.exit(0);
+          this.onDisconnect(0);
         },
         error: (_s, error) => {
           log.error("engine socket error:", error);
-          process.exit(1);
+          this.onDisconnect(1);
         },
       },
     });
@@ -101,7 +135,9 @@ export class SocketEngine implements Engine {
   }
 
   private onData(chunk: Uint8Array) {
-    this.buffer += this.decoder.decode(chunk);
+    // stream: true carries multi-byte UTF-8 sequences split across reads
+    // over to the next chunk instead of mangling both halves to U+FFFD.
+    this.buffer += this.decoder.decode(chunk, { stream: true });
     const lines = this.buffer.split("\n");
     this.buffer = lines.pop() ?? "";
     for (const line of lines) {
@@ -133,11 +169,25 @@ export class SocketEngine implements Engine {
           this.send({ t: "hookres", id: msg.id, res: null });
           return;
         }
+        // Reply exactly once. The engine passed through on its own timeout
+        // long ago by the time the deadline fires; this bounds our state and
+        // surfaces the hung handler. A late settle is dropped here.
+        let replied = false;
+        const reply = (res: HookResult) => {
+          if (replied) return;
+          replied = true;
+          clearTimeout(deadline);
+          this.send({ t: "hookres", id: msg.id, res });
+        };
+        const deadline = setTimeout(() => {
+          log.error(`${msg.name} hook handler still pending after ${HOOK_DEADLINE_MS} ms; passing through.`);
+          reply(null);
+        }, HOOK_DEADLINE_MS);
         Promise.resolve(handler(msg.args))
-          .then((res) => this.send({ t: "hookres", id: msg.id, res: res ?? null }))
+          .then((res) => reply(res ?? null))
           .catch((e) => {
             log.error(`unhandled error in ${msg.name} hook:`, e);
-            this.send({ t: "hookres", id: msg.id, res: null });
+            reply(null);
           });
         break;
       }
@@ -145,6 +195,7 @@ export class SocketEngine implements Engine {
         const pending = this.pending.get(msg.id);
         this.pending.delete(msg.id);
         if (!pending) return;
+        clearTimeout(pending.timer);
         if (msg.ok) pending.resolve(msg.val);
         else pending.reject(new Error(msg.err ?? "rpc failed"));
         break;
