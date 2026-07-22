@@ -29,18 +29,49 @@ case "$libc" in
 esac
 
 echo "Fetching latest verge release from $REPO..."
-url=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" |
+release_json=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest")
+url=$(printf '%s' "$release_json" |
   grep -o "\"browser_download_url\": *\"[^\"]*linux-x64\.tar\.gz\"" |
   head -1 | cut -d'"' -f4)
 if [ -z "$url" ]; then
   echo "Could not find a linux-x64 release asset for $REPO." >&2
   exit 1
 fi
+sums_url=$(printf '%s' "$release_json" |
+  grep -o "\"browser_download_url\": *\"[^\"]*SHA256SUMS\"" |
+  head -1 | cut -d'"' -f4)
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-curl -fsSL "$url" -o "$tmp/verge.tar.gz"
-tar -xzf "$tmp/verge.tar.gz" -C "$QLDS_DIR"
+tarball=$(basename "$url")
+curl -fsSL "$url" -o "$tmp/$tarball"
+
+# Verify the download when the release publishes checksums (>= 0.2.0).
+if [ -n "$sums_url" ] && command -v sha256sum >/dev/null; then
+  curl -fsSL "$sums_url" -o "$tmp/SHA256SUMS"
+  (cd "$tmp" && grep " $tarball\$" SHA256SUMS | sha256sum -c -) || {
+    echo "Checksum verification failed for $tarball." >&2
+    exit 1
+  }
+else
+  echo "Note: no checksum verification (no SHA256SUMS asset or sha256sum tool)."
+fi
+
+# Stage the extraction so a failed download or unpack never leaves the live
+# directory half-updated, and swap the bundle directory wholesale so files
+# removed upstream don't linger from an older install.
+mkdir "$tmp/pkg"
+tar -xzf "$tmp/$tarball" -C "$tmp/pkg"
+rm -rf "$QLDS_DIR/verge.old"
+if [ -d "$QLDS_DIR/verge" ]; then mv "$QLDS_DIR/verge" "$QLDS_DIR/verge.old"; fi
+mv "$tmp/pkg/verge" "$QLDS_DIR/verge"
+rm -rf "$QLDS_DIR/verge.old"
+for f in "$tmp/pkg"/* "$tmp/pkg"/.[!.]*; do
+  [ -e "$f" ] || continue
+  base=$(basename "$f")
+  [ "$base" = "verge" ] && continue
+  mv -f "$f" "$QLDS_DIR/$base"
+done
 
 # First-time config.
 if [ ! -f "$QLDS_DIR/verge.toml" ]; then
