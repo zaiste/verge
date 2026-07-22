@@ -109,4 +109,148 @@ describe("zmtp", () => {
     expect(received[0]).toBe('{"TYPE":"TEST","DATA":{}}');
     expect(JSON.parse(received[1]!).TYPE).toBe("LONG");
   }, 5000);
+
+  test("PLAIN handshake: HELLO -> WELCOME -> INITIATE -> READY, then delivery", async () => {
+    const received: string[] = [];
+    const commandsSeen: string[] = [];
+    let resolveDone!: () => void;
+    const done = new Promise<void>((r) => (resolveDone = r));
+
+    function plainGreeting(): Uint8Array {
+      const g = pubGreeting();
+      g.fill(0, 12, 32);
+      new TextEncoder().encodeInto("PLAIN", g.subarray(12, 32));
+      return g;
+    }
+    function command(name: string): Uint8Array {
+      const n = new TextEncoder().encode(name);
+      const buf = new Uint8Array(2 + 1 + n.length);
+      buf[0] = 0x04;
+      buf[1] = 1 + n.length;
+      buf[2] = n.length;
+      buf.set(n, 3);
+      return buf;
+    }
+
+    const server = Bun.listen<{ stage: number }>({
+      hostname: "127.0.0.1",
+      port: 0,
+      socket: {
+        open(s) {
+          s.data = { stage: 0 };
+          s.write(plainGreeting());
+        },
+        data(s, chunk) {
+          if (s.data.stage === 0 && chunk.length >= 64) {
+            s.data.stage = 1; // client greeting consumed; HELLO follows
+            return;
+          }
+          // Frames from the client: HELLO, INITIATE, then the subscription.
+          const text = new TextDecoder().decode(chunk);
+          if (text.includes("HELLO")) {
+            commandsSeen.push("HELLO");
+            s.write(command("WELCOME"));
+          } else if (text.includes("INITIATE")) {
+            commandsSeen.push("INITIATE");
+            s.write(readyCommand());
+          } else if (chunk.includes(0x01)) {
+            s.write(shortMessage('{"TYPE":"PLAINOK"}'));
+          }
+        },
+      },
+    });
+
+    const sub = new ZmtpSub({
+      host: "127.0.0.1",
+      port: server.port,
+      username: "stats",
+      password: "hunter2",
+      onMessage(data) {
+        received.push(new TextDecoder().decode(data));
+        resolveDone();
+      },
+      onError(err) {
+        throw err;
+      },
+      onClose() {},
+    });
+
+    await sub.connect();
+    await done;
+    sub.close();
+    server.stop(true);
+
+    expect(commandsSeen).toEqual(["HELLO", "INITIATE"]);
+    expect(received[0]).toBe('{"TYPE":"PLAINOK"}');
+  }, 5000);
+
+  test("a protocol error still fires onClose so the caller can reconnect", async () => {
+    const errors: string[] = [];
+    let resolveClosed!: () => void;
+    const closed = new Promise<void>((r) => (resolveClosed = r));
+
+    const server = Bun.listen<undefined>({
+      hostname: "127.0.0.1",
+      port: 0,
+      socket: {
+        open(s) {
+          // Not a ZMTP peer: garbage instead of the greeting.
+          s.write(new Uint8Array(64).fill(0x42));
+        },
+        data() {},
+      },
+    });
+
+    const sub = new ZmtpSub({
+      host: "127.0.0.1",
+      port: server.port,
+      onMessage() {},
+      onError(err) {
+        errors.push(err.message);
+      },
+      onClose() {
+        resolveClosed();
+      },
+    });
+
+    await sub.connect();
+    // Regression: the error teardown used to set the intentional-close flag,
+    // which swallowed onClose and permanently disabled the stats feed.
+    await closed;
+    server.stop(true);
+
+    expect(errors.some((e) => e.includes("not a ZMTP 3.x peer"))).toBe(true);
+  }, 5000);
+
+  test("close() suppresses onClose (intentional shutdown does not reconnect)", async () => {
+    let closeCalls = 0;
+
+    const server = Bun.listen<undefined>({
+      hostname: "127.0.0.1",
+      port: 0,
+      socket: {
+        open(s) {
+          s.write(pubGreeting());
+        },
+        data() {},
+      },
+    });
+
+    const sub = new ZmtpSub({
+      host: "127.0.0.1",
+      port: server.port,
+      onMessage() {},
+      onError() {},
+      onClose() {
+        closeCalls++;
+      },
+    });
+
+    await sub.connect();
+    sub.close();
+    await new Promise((r) => setTimeout(r, 100));
+    server.stop(true);
+
+    expect(closeCalls).toBe(0);
+  }, 5000);
 });

@@ -128,7 +128,11 @@ export class ZmtpSub {
             this.onData(chunk);
           } catch (e) {
             this.opts.onError(e instanceof Error ? e : new Error(String(e)));
-            this.close();
+            // Tear down without setting `closed`: the close event must still
+            // reach onClose so the caller can reconnect. close() is reserved
+            // for intentional shutdown, which suppresses reconnection.
+            this.sock?.end();
+            this.sock = null;
           }
         },
         close: () => {
