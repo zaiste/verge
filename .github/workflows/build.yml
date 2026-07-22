@@ -55,10 +55,12 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: shim
+      # centos:7 is the pinned floor itself (glibc 2.17); the EOL image needs
+      # no toolchain because load_test is cross-built on the runner.
       - name: Load the shim on old glibc
         run: |
           chmod +x load_test
-          for image in debian:10 debian:11 ubuntu:20.04 rockylinux:8; do
+          for image in centos:7 debian:10 debian:11 ubuntu:20.04 rockylinux:8; do
             echo "--- $image"
             docker run --rm -v "$PWD:/w" -w /w "$image" ./load_test verge.x64.so
           done
