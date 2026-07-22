@@ -46,6 +46,9 @@ export default {
       (player) => {
         ctx.delay(delayMs, () => {
           void (async () => {
+            // The client slot may have been reused during the delay; only
+            // proceed if this id still belongs to the same player.
+            if (ctx.player(player.id)?.steamId !== player.steamId) return;
             const motd = ctx.db.get(MOTD_KEY);
             if (motd === null) return;
             const soundEnabled =
