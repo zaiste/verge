@@ -12,7 +12,7 @@ import { CsCache, Game } from "./game";
 import { PlayerStore } from "./players";
 import { ChatChannel, ConsoleChannel } from "./channels";
 import { Pipeline, type Channels } from "./pipeline";
-import { createContext, type Plugin, type PluginRegistration, type RuntimeServices } from "./plugin";
+import { clearTrackedTimer, createContext, type Plugin, type PluginRegistration, type RuntimeServices } from "./plugin";
 import { RAW_EVENTS, type RawEventName } from "./protocol";
 import { Command } from "./commands";
 import { EventResult } from "./constants";
@@ -162,7 +162,7 @@ export class Runtime {
       // Roll back whatever setup managed to register.
       this.events.removePlugin(name);
       this.commands.removePlugin(name);
-      for (const t of timers) clearTimeout(t as number);
+      for (const t of timers) clearTrackedTimer(t);
       throw e;
     }
   }
@@ -178,7 +178,7 @@ export class Runtime {
     }
     this.events.removePlugin(name);
     this.commands.removePlugin(name);
-    for (const t of reg.timers) clearTimeout(t as number);
+    for (const t of reg.timers) clearTrackedTimer(t);
     this.plugins.delete(name);
     log.info(`unloaded plugin '${name}'.`);
   }

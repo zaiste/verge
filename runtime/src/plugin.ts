@@ -73,11 +73,22 @@ export function definePlugin(plugin: Plugin): Plugin {
   return plugin;
 }
 
+/** A tracked ctx.delay/ctx.every handle; the kind decides how to clear it. */
+export interface TrackedTimer {
+  kind: "timeout" | "interval";
+  handle: number | NodeJS.Timeout;
+}
+
+export function clearTrackedTimer(t: TrackedTimer): void {
+  if (t.kind === "interval") clearInterval(t.handle as number);
+  else clearTimeout(t.handle as number);
+}
+
 /** Everything a plugin registered, so unload can undo it. */
 export interface PluginRegistration {
   plugin: Plugin;
   teardown: PluginTeardown | void;
-  timers: (number | NodeJS.Timeout)[];
+  timers: TrackedTimer[];
 }
 
 export interface RuntimeServices {
@@ -93,10 +104,10 @@ export interface RuntimeServices {
 
 export function createContext(name: string, services: RuntimeServices): {
   ctx: PluginContext;
-  timers: (number | NodeJS.Timeout)[];
+  timers: TrackedTimer[];
 } {
   const { engine, events, commands, store, db, game, channels, config } = services;
-  const timers: (number | NodeJS.Timeout)[] = [];
+  const timers: TrackedTimer[] = [];
 
   const ctx: PluginContext = {
     name,
@@ -129,10 +140,10 @@ export function createContext(name: string, services: RuntimeServices): {
     setCvar: (cvarName, value) => engine.rpc("set_cvar", cvarName, value),
 
     delay(ms, fn) {
-      timers.push(setTimeout(fn, ms));
+      timers.push({ kind: "timeout", handle: setTimeout(fn, ms) });
     },
     every(ms, fn) {
-      timers.push(setInterval(fn, ms));
+      timers.push({ kind: "interval", handle: setInterval(fn, ms) });
     },
   };
 
