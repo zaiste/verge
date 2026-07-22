@@ -34,6 +34,35 @@ jobs:
       # without silently raising the requirement on servers.
       - name: Build with the release toolchain
         run: make clean && tools/build-shim.sh
+      - name: Build the portability loader
+        run: zig cc -target x86_64-linux-gnu.2.17 -o bin/load_test tests/shim/load_test.c -ldl
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: shim
+          path: |
+            bin/verge.x64.so
+            bin/load_test
+          retention-days: 1
+
+  # Proves the shipped library actually loads on the older distributions
+  # servers run, rather than trusting the symbol-version floor alone. Uses
+  # docker instead of `container:` so these images never have to host the
+  # Actions runner's Node.
+  portability:
+    needs: shim
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: shim
+      - name: Load the shim on old glibc
+        run: |
+          chmod +x load_test
+          for image in debian:10 debian:11 ubuntu:20.04 rockylinux:8; do
+            echo "--- $image"
+            docker run --rm -v "$PWD:/w" -w /w "$image" ./load_test verge.x64.so
+          done
+
   runtime:
     runs-on: ubuntu-latest
     steps:
