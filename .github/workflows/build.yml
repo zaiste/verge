@@ -20,17 +20,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: 0.16.0
       # Native build: the runner's gcc is the strictest warning check we get.
       - name: Build with gcc
         run: make so
+      # Drives the real IPC layer against a real sidecar, engine stubbed.
+      - name: Test the shim protocol
+        run: make check-shim
       # Shipping build: pins the glibc floor so the runner image can move
       # without silently raising the requirement on servers.
       - name: Build with the release toolchain
         run: make clean && tools/build-shim.sh
-
   runtime:
     runs-on: ubuntu-latest
     steps:

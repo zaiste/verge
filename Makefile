@@ -26,7 +26,7 @@ SOURCES = $(CORE_SOURCES) $(SHIM_SOURCES)
 OBJS = $(SOURCES:.c=.o)
 OUTPUT = $(BINDIR)/verge$(SUFFIX).so
 
-.PHONY: all so debug runtime clean
+.PHONY: all so debug runtime check-shim clean
 
 all: so
 
@@ -40,6 +40,18 @@ debug: $(OUTPUT)
 # Bundles the TypeScript runtime + plugins into bin/verge/ (requires bun).
 runtime:
 	cd runtime && bun install --frozen-lockfile && bun run bundle
+
+# Links the real IPC layer into a test binary and stubs the engine side, so
+# the protocol can be exercised without a QLDS. Needs bun on PATH.
+HARNESS = $(BINDIR)/shim-harness
+HARNESS_SRC = tests/shim/harness.c shim/shim_ipc.c shim/cJSON.c
+
+check-shim: $(HARNESS)
+	./$(HARNESS)
+
+$(HARNESS): $(HARNESS_SRC) shim/shim_internal.h
+	@mkdir -p $(BINDIR)
+	$(CC) $(filter-out -shared,$(CFLAGS)) -I. -D$(VERSION) -o $@ $(HARNESS_SRC) $(LDFLAGS)
 
 $(OUTPUT): $(OBJS)
 	@mkdir -p $(BINDIR)
