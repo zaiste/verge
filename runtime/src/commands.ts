@@ -142,7 +142,10 @@ export class CommandRegistry {
         // command explicitly asks for it (avoids "unknown cmd" spam).
         if (isClientCmd) passThrough = cmd.clientCmdPass;
 
-        if ((await this.events.dispatch("command", player, cmd, msg)) === false) return true;
+        // A cancelled command event skips the handler but must still honor
+        // client-command suppression, or the raw command leaks to the
+        // engine as an unknown command.
+        if ((await this.events.dispatch("command", player, cmd, msg)) === false) return passThrough;
 
         let res: unknown;
         try {
