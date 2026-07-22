@@ -130,8 +130,9 @@ Steam QLDS in `~/qlds`. Deploy `bin/verge.x64.so` plus `bin/verge/` there
 and run the `smoketest` plugin. Because it is emulated, set
 `VERGE_HOOK_TIMEOUT_MS=1000`; the default 100 ms assumes native speed.
 
-Verified there: all 14 smoke checks against the release tarball, plugin
-load, kill/respawn of the sidecar, and the ZMQ stats feed.
+Verified there: all 15 smoke checks (including configstring bounds
+rejection), plugin load, kill/respawn of the sidecar, and the ZMQ stats
+feed.
 
 ## Known gaps
 

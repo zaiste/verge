@@ -163,6 +163,17 @@ class Smoke {
     const died = await this.until(() => deaths.length > 0 || undefined, 45000);
     await this.report("death event from ZMQ stats", died !== null, `deaths=${deaths.length}`);
 
+    // --- bounds: configstring index 1024 must be an RPC error, not a
+    // Com_Error that drops the whole server ---
+    let csRejected = false;
+    try {
+      await ctx.engine.rpc("set_configstring", 1024, "overflow");
+    } catch {
+      csRejected = true;
+    }
+    const aliveAfter = (await ctx.engine.rpc("get_cvar", "sv_maxclients")) !== null;
+    await this.report("configstring 1024 rejected, server alive", csRejected && aliveAfter);
+
     // --- moderation: owner kick via rcon actually removes the client ---
     await ctx.engine.rpc("console_command", `verge !kick ${other.id}`);
     const kicked = await this.until(() => (ctx.player(other.id) === null ? true : undefined), 5000);
