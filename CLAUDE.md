@@ -9,16 +9,34 @@ hosts TypeScript plugins.
 qzeroded.x64  ←LD_PRELOAD─  verge.x64.so  ──unix socket, NDJSON──  bun
 ```
 
+Released at v0.1.0. It replaced minqlx's embedded CPython, Redis, and
+~30 `qlx_*` cvars; see [docs/porting.md](docs/porting.md) for the
+module, plugin, and API mapping.
+
+## Layout
+
+| Path | What |
+|---|---|
+| `core/` | inherited C: pattern scanning, inline hooks, HDE |
+| `shim/` | IPC socket + supervision, dispatchers, the 42 RPCs |
+| `runtime/src/` | sidecar: engine transport, event pipeline, commands, db |
+| `plugins/` | the six bundled plugins, plus `smoketest` |
+| `testkit/` + `tests/` | in-process engine fake; unit and shim tests |
+| `tools/` | install, release packaging, glibc-pinned build, migration |
+
 ## Commands
 
 ```sh
-make so                    # build the shim with the host cc
+tools/build-shim.sh        # build the shim (zig, pinned glibc floor, checked)
 make check-shim            # shim IPC tests (needs bun on PATH)
-tools/build-shim.sh        # release build: pins the glibc floor, checks it
 bun test                   # plugin + runtime tests
 cd runtime && bun run typecheck
 cd runtime && bun run bundle   # -> bin/verge/
 ```
+
+`make so` builds with the host compiler and only works on linux-x64; on
+this Mac use `tools/build-shim.sh` (or
+`make CC="zig cc -target x86_64-linux-gnu" so`), which cross-compiles.
 
 Docs worth reading before changing behaviour:
 [docs/protocol.md](docs/protocol.md) (wire protocol and threading),
@@ -66,6 +84,14 @@ to glibc 2.28. Building on a modern image without pinning silently
 produces a library that needs `GLIBC_2.34`. The bundled `bun` is the
 baseline build for the same reason: the default one needs AVX2.
 
+## Releasing
+
+Push a `v*` tag: `.github/workflows/release.yml` builds the tarball with
+`tools/package-release.sh` and attaches it to the release, creating one
+if it does not exist so notes can be written by hand first. `install.sh`
+is served from `main`, so installer fixes ship without a new release.
+Actions are pinned by commit SHA with the version in a trailing comment.
+
 ## Conventions
 
 - The project is `verge` everywhere in user-facing names, paths, env vars
@@ -85,3 +111,16 @@ OrbStack VM (`orb -m minqlx-test`, amd64 Debian under emulation) with a
 Steam QLDS in `~/qlds`. Deploy `bin/verge.x64.so` plus `bin/verge/` there
 and run the `smoketest` plugin. Because it is emulated, set
 `VERGE_HOOK_TIMEOUT_MS=1000`; the default 100 ms assumes native speed.
+
+Verified there: all 14 smoke checks against the release tarball, plugin
+load, kill/respawn of the sidecar, and the ZMQ stats feed.
+
+## Known gaps
+
+- The ban flow has never been exercised with a real Steam client —
+  `!ban`, reconnect, rejection via the `player_connect` string result.
+  Bots cannot test it.
+- No soak test; every live run so far has been about two minutes.
+- `VERGE_TRACE` recordings exist but nothing replays them yet.
+- The engine-facing half of the shim (`core/`) has no automated tests,
+  and its pattern offsets target specific QLDS builds.

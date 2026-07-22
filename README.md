@@ -66,8 +66,10 @@ creeps above it.
 
 Configuration lives in one file, [`verge.toml`](verge.toml.example):
 owner, plugin list, per-plugin settings. Env vars (`VERGE_*`) override.
-Coming from Python-era `qlx_*` cvars? See the
-[mapping table](docs/config.md). Migrating a Redis database:
+
+Coming from minqlx? [docs/porting.md](docs/porting.md) maps the modules,
+plugins, and plugin API; [docs/config.md](docs/config.md) maps every
+`qlx_*` cvar. An existing Redis database imports with
 `bun tools/migrate-redis.ts redis://localhost:6379 verge.db`.
 
 In-game, commands start with `!` (permission levels 0–5, owner is 5):
