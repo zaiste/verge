@@ -49,9 +49,10 @@ export class Db {
     return row.value;
   }
 
-  /** @param ttl time-to-live in seconds; omit for no expiry. */
+  /** @param ttl time-to-live in seconds; omit for no expiry. A ttl of 0 (or
+   * negative) writes an already-expired row, not a permanent one. */
   set(key: string, value: string | number, opts?: { ttl?: number }): void {
-    const expiresAt = opts?.ttl ? Date.now() + opts.ttl * 1000 : null;
+    const expiresAt = opts?.ttl !== undefined ? Date.now() + opts.ttl * 1000 : null;
     this.setStmt.run(key, String(value), expiresAt);
   }
 
